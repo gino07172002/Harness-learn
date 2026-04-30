@@ -37,10 +37,15 @@ def server_main() -> int:
 
 
 def replay_main() -> int:
+    import json
+    from harness.replay import replay_trace
+
     parser = build_replay_parser()
     args = parser.parse_args()
-    print(f"Replay entry parsed trace={args.trace} headed={args.headed}")
-    return 0
+    trace = json.loads(args.trace.read_text(encoding="utf-8"))
+    result = replay_trace(trace, headed=args.headed)
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
 
 
 def report_main() -> int:
