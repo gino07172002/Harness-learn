@@ -1,5 +1,7 @@
 .worktrees/
-traces/
-reports/
+traces/*
+!traces/.gitkeep
+reports/*
+!reports/.gitkeep
 __pycache__/
 .pytest_cache/
