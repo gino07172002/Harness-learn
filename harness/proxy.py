@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from harness.run_log import RunLogger
 from harness.trace_store import TraceStore
 
 
@@ -25,10 +26,11 @@ def resolve_target_path(target_root: Path, request_path: str) -> Path:
     return candidate
 
 
-def build_injected_html(html_text: str, target_name: str) -> str:
+def build_injected_html(html_text: str, target_name: str, harness_run_id: str | None = None) -> str:
     bootstrap = {
         "version": 1,
         "targetName": target_name,
+        "harnessRunId": harness_run_id,
     }
     script = (
         "<script>"
@@ -48,9 +50,12 @@ class HarnessProxyHandler(BaseHTTPRequestHandler):
     target_name: str
     client_path: Path
     trace_store: TraceStore
+    run_logger: RunLogger
+    run_id: str
 
     def do_GET(self) -> None:
         if urlparse(self.path).path == CLIENT_ROUTE:
+            self.run_logger.record("client.served", path=CLIENT_ROUTE)
             self._send_file(self.client_path, "application/javascript", inject=False)
             return
 
@@ -65,6 +70,11 @@ class HarnessProxyHandler(BaseHTTPRequestHandler):
             return
 
         content_type = mimetypes.guess_type(target_path.name)[0] or "application/octet-stream"
+        if content_type.startswith("text/html"):
+            self.run_logger.record(
+                "html.injected",
+                path=str(target_path.relative_to(self.target_root.resolve())),
+            )
         self._send_file(target_path, content_type, inject=content_type.startswith("text/html"))
 
     def do_POST(self) -> None:
@@ -80,7 +90,14 @@ class HarnessProxyHandler(BaseHTTPRequestHandler):
             self.send_error(400, f"Invalid JSON: {exc}")
             return
 
+        trace.setdefault("session", {})["harnessRunId"] = self.run_id
+        self.run_logger.record(
+            "trace.received",
+            eventCount=len(trace.get("events", [])),
+            snapshotCount=len(trace.get("snapshots", [])),
+        )
         path = self.trace_store.write_trace(trace)
+        self.run_logger.record("trace.saved", path=str(path))
         response = json.dumps({"ok": True, "path": str(path)}).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -92,7 +109,7 @@ class HarnessProxyHandler(BaseHTTPRequestHandler):
         data = path.read_bytes()
         if inject:
             text = data.decode("utf-8")
-            data = build_injected_html(text, self.target_name).encode("utf-8")
+            data = build_injected_html(text, self.target_name, self.run_id).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
@@ -103,6 +120,8 @@ class HarnessProxyHandler(BaseHTTPRequestHandler):
 def run_proxy_server(target_root: Path, target_name: str, host: str, port: int) -> None:
     client_path = Path(__file__).parent / "static" / "harness_client.js"
     trace_store = TraceStore(Path("traces"))
+    run_logger = RunLogger(Path("runs"))
+    run_logger.record("proxy.started", port=port, host=host, targetName=target_name, targetRoot=str(target_root))
 
     class ConfiguredHarnessProxyHandler(HarnessProxyHandler):
         pass
@@ -111,6 +130,8 @@ def run_proxy_server(target_root: Path, target_name: str, host: str, port: int) 
     ConfiguredHarnessProxyHandler.target_name = target_name
     ConfiguredHarnessProxyHandler.client_path = client_path
     ConfiguredHarnessProxyHandler.trace_store = trace_store
+    ConfiguredHarnessProxyHandler.run_logger = run_logger
+    ConfiguredHarnessProxyHandler.run_id = run_logger.run_id
     server = ThreadingHTTPServer((host, port), ConfiguredHarnessProxyHandler)
     print(f"Serving {target_root} as {target_name} at http://{host}:{port}")
     server.serve_forever()

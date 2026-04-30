@@ -3,5 +3,7 @@ traces/*
 !traces/.gitkeep
 reports/*
 !reports/.gitkeep
+runs/*
+!runs/.gitkeep
 __pycache__/
 .pytest_cache/

@@ -9,6 +9,7 @@
     session: {
       id: new Date().toISOString().replace(/[:.]/g, "-"),
       targetName: bootstrap.targetName,
+      harnessRunId: bootstrap.harnessRunId || null,
       targetRoot: null,
       proxyUrl: window.location.origin,
       url: window.location.href,
