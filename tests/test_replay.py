@@ -1,4 +1,4 @@
-from harness.replay import replayable_events
+from harness.replay import attach_replay_result, replayable_events
 
 
 def test_replayable_events_keeps_user_input_events():
@@ -31,3 +31,14 @@ def test_replayable_events_drops_unknown_events():
     trace = {"events": [{"type": "custom"}, {"type": "click"}]}
 
     assert [event["type"] for event in replayable_events(trace)] == ["click"]
+
+
+def test_attach_replay_result_keeps_original_trace_fields():
+    trace = {"version": 1, "events": [{"type": "click"}], "replay": None}
+    result = {"ok": True, "completedEvents": 1}
+
+    updated = attach_replay_result(trace, result)
+
+    assert updated["version"] == 1
+    assert updated["events"] == [{"type": "click"}]
+    assert updated["replay"] == result

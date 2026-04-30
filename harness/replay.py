@@ -23,6 +23,12 @@ def replayable_events(trace: dict[str, Any]) -> list[dict[str, Any]]:
     return [event for event in trace.get("events", []) if event.get("type") in REPLAYABLE_TYPES]
 
 
+def attach_replay_result(trace: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    updated = dict(trace)
+    updated["replay"] = result
+    return updated
+
+
 async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dict[str, Any]:
     session = trace.get("session", {})
     proxy_url = session.get("proxyUrl")
