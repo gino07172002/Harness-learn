@@ -2,13 +2,18 @@
 
 ## Goal
 
-Build a learning project for software harness engineering around the existing
-animation editor in `d:/claude`.
+Build a standalone learning project for software harness engineering in
+`d:/harness`.
 
-The harness must help a human and AI debug difficult browser-editor bugs by
-capturing user operations, app state changes, console output, errors,
-screenshots, and replay results. The first version must not modify any file in
-`d:/claude`.
+The product is the harness itself: a reusable zero-modification browser debug
+harness that can wrap local HTML and JavaScript apps, capture user operations,
+inspect observable runtime state, replay traces, and generate reports for a
+human or AI debugger.
+
+The existing animation editor in `d:/claude` is the first reference target and
+test material. It is not the product being built. The first version must be able
+to use `d:/claude` as a realistic target without modifying any file in that
+project.
 
 This project intentionally feels like a browser-oriented cousin of gdb or
 valgrind, but it does not claim raw process-memory access. Browser JavaScript is
@@ -24,9 +29,9 @@ inspection, and deterministic replay.
 - Do not attempt raw memory scanning of the browser process in V1.
 - Do not use source-code rewriting or AST instrumentation in V1.
 
-## System Under Test
+## Reference Target
 
-The SUT is the animation editor in `d:/claude`:
+The primary reference target for V1 is the animation editor in `d:/claude`:
 
 - Vanilla HTML, CSS, and JavaScript.
 - Served locally with `python -m http.server 5173`.
@@ -35,13 +40,16 @@ The SUT is the animation editor in `d:/claude`:
 - Uses many global functions and variables because scripts are loaded directly
   by `index.html`.
 
-The harness lives in `d:/harness` and treats the SUT as read-only.
+The harness lives in `d:/harness` and treats all target apps as read-only. V1
+only needs to prove the generic harness against `d:/claude`, but the CLI and
+trace model should use target-neutral names such as `targetRoot`, `targetUrl`,
+and `targetName`.
 
 ## V1 Architecture
 
 V1 uses a hybrid design:
 
-1. A local proxy server serves the target project from `d:/claude`.
+1. A local proxy server serves a chosen target project directory.
 2. The proxy dynamically injects a harness client script into HTML responses.
 3. The harness client records browser-side events and snapshots.
 4. A Playwright-controlled Chromium window opens the proxied app.
@@ -57,9 +65,18 @@ d:/harness
   harness_client.js
   replay_runner.py
   report_generator.py
+  examples/
+    targets/
   traces/
   reports/
   docs/superpowers/specs/
+```
+
+The default learning target can be `d:/claude`, but the command shape should
+make the target explicit:
+
+```bash
+python harness_server.py --target d:/claude --target-name claude-editor --port 6173
 ```
 
 ## Control Model
@@ -234,8 +251,9 @@ After V1 works, possible extensions include:
 
 V1 is successful when:
 
-- `d:/claude` remains unmodified.
-- The harness can launch the editor through a proxy.
+- The harness exists as its own project in `d:/harness`.
+- The harness can launch a chosen local HTML/JavaScript target through a proxy.
+- `d:/claude` can be used as the first realistic target and remains unmodified.
 - A user can record a real interaction as a trace.
 - The trace contains events, snapshots, console output, and errors.
 - Playwright can replay at least basic click, drag, keyboard, input, and wheel
