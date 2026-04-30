@@ -27,6 +27,15 @@ def build_report_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_doctor_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Check whether the harness can run on this machine")
+    parser.add_argument("--target", type=Path, required=True, help="Target app directory to verify")
+    parser.add_argument("--port", type=int, default=6173, help="Port to check")
+    parser.add_argument("--host", default="127.0.0.1", help="Host to check")
+    parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
+    return parser
+
+
 def server_main() -> int:
     from harness.proxy import run_proxy_server
 
@@ -63,3 +72,13 @@ def report_main() -> int:
     else:
         print(markdown)
     return 0
+
+
+def doctor_main() -> int:
+    from harness.doctor import render_doctor_json, render_doctor_text, run_doctor_checks
+
+    parser = build_doctor_parser()
+    args = parser.parse_args()
+    results = run_doctor_checks(args.target, args.port, args.host)
+    print(render_doctor_json(results) if args.json else render_doctor_text(results), end="")
+    return 0 if all(result.ok for result in results) else 1

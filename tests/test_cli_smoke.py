@@ -28,3 +28,9 @@ def test_report_generator_help_exits_successfully():
     result = run_script("report_generator.py", "--help")
     assert result.returncode == 0
     assert "Generate a Markdown report from a harness trace" in result.stdout
+
+
+def test_harness_doctor_help_exits_successfully():
+    result = run_script("harness_doctor.py", "--help")
+    assert result.returncode == 0
+    assert "Check whether the harness can run on this machine" in result.stdout
