@@ -7,6 +7,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from harness.trace_store import TraceStore
+
 
 CLIENT_ROUTE = "/__harness__/client.js"
 
@@ -45,6 +47,7 @@ class HarnessProxyHandler(BaseHTTPRequestHandler):
     target_root: Path
     target_name: str
     client_path: Path
+    trace_store: TraceStore
 
     def do_GET(self) -> None:
         if urlparse(self.path).path == CLIENT_ROUTE:
@@ -64,6 +67,27 @@ class HarnessProxyHandler(BaseHTTPRequestHandler):
         content_type = mimetypes.guess_type(target_path.name)[0] or "application/octet-stream"
         self._send_file(target_path, content_type, inject=content_type.startswith("text/html"))
 
+    def do_POST(self) -> None:
+        if urlparse(self.path).path != "/__harness__/trace":
+            self.send_error(404, f"Not found: {html.escape(self.path)}")
+            return
+
+        length = int(self.headers.get("Content-Length", "0"))
+        raw_body = self.rfile.read(length)
+        try:
+            trace = json.loads(raw_body.decode("utf-8"))
+        except json.JSONDecodeError as exc:
+            self.send_error(400, f"Invalid JSON: {exc}")
+            return
+
+        path = self.trace_store.write_trace(trace)
+        response = json.dumps({"ok": True, "path": str(path)}).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(response)))
+        self.end_headers()
+        self.wfile.write(response)
+
     def _send_file(self, path: Path, content_type: str, inject: bool) -> None:
         data = path.read_bytes()
         if inject:
@@ -78,6 +102,7 @@ class HarnessProxyHandler(BaseHTTPRequestHandler):
 
 def run_proxy_server(target_root: Path, target_name: str, host: str, port: int) -> None:
     client_path = Path(__file__).parent / "static" / "harness_client.js"
+    trace_store = TraceStore(Path("traces"))
 
     class ConfiguredHarnessProxyHandler(HarnessProxyHandler):
         pass
@@ -85,6 +110,7 @@ def run_proxy_server(target_root: Path, target_name: str, host: str, port: int) 
     ConfiguredHarnessProxyHandler.target_root = target_root
     ConfiguredHarnessProxyHandler.target_name = target_name
     ConfiguredHarnessProxyHandler.client_path = client_path
+    ConfiguredHarnessProxyHandler.trace_store = trace_store
     server = ThreadingHTTPServer((host, port), ConfiguredHarnessProxyHandler)
     print(f"Serving {target_root} as {target_name} at http://{host}:{port}")
     server.serve_forever()
