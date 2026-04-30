@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "session": {
+    "id": "golden-simple",
+    "targetName": "simple",
+    "proxyUrl": "http://127.0.0.1:6173",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "harnessRunId": "golden-run"
+  },
+  "events": [
+    {
+      "type": "click",
+      "time": 1,
+      "target": {
+        "selectorHint": "#incrementBtn"
+      },
+      "pointer": {
+        "x": 95,
+        "y": 85,
+        "button": 0,
+        "buttons": 0
+      }
+    },
+    {
+      "type": "input",
+      "time": 2,
+      "target": {
+        "selectorHint": "#nameInput"
+      }
+    },
+    {
+      "type": "click",
+      "time": 3,
+      "target": {
+        "selectorHint": "#drawCanvas"
+      },
+      "pointer": {
+        "x": 80,
+        "y": 120,
+        "button": 0,
+        "buttons": 0
+      }
+    }
+  ],
+  "snapshots": [
+    {
+      "reason": "capture:start",
+      "debugSnapshot": {
+        "ok": true,
+        "value": {
+          "count": 0
+        }
+      }
+    },
+    {
+      "reason": "after:click",
+      "debugSnapshot": {
+        "ok": true,
+        "value": {
+          "count": 1
+        }
+      }
+    }
+  ],
+  "console": [],
+  "errors": [],
+  "screenshots": [],
+  "replay": {
+    "ok": true,
+    "completedEvents": 3,
+    "firstFailure": null,
+    "console": [],
+    "errors": []
+  }
+}

@@ -40,3 +40,9 @@ def test_harness_validate_trace_help_exits_successfully():
     result = run_script("harness_validate_trace.py", "--help")
     assert result.returncode == 0
     assert "Validate a harness trace JSON file" in result.stdout
+
+
+def test_harness_regress_help_exits_successfully():
+    result = run_script("harness_regress.py", "--help")
+    assert result.returncode == 0
+    assert "Run golden trace regression" in result.stdout

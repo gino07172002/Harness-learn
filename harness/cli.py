@@ -44,6 +44,13 @@ def build_validate_trace_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_regress_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Run golden trace regression")
+    parser.add_argument("--golden", type=Path, required=True, help="Golden trace JSON path")
+    parser.add_argument("--report", type=Path, help="Golden report Markdown path")
+    return parser
+
+
 def server_main() -> int:
     from harness.proxy import run_proxy_server
 
@@ -112,4 +119,19 @@ def validate_trace_main() -> int:
             print(error)
         return 1
     print(f"Trace valid: {args.trace}")
+    return 0
+
+
+def regress_main() -> int:
+    from harness.regression import run_report_regression
+
+    parser = build_regress_parser()
+    args = parser.parse_args()
+    golden_report = args.report or args.golden.with_name(args.golden.stem.replace("-trace", "-report") + ".md")
+    errors = run_report_regression(args.golden, golden_report)
+    if errors:
+        for error in errors:
+            print(error)
+        return 1
+    print(f"Golden regression passed: {args.golden}")
     return 0
