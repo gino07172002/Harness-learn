@@ -1,0 +1,90 @@
+from __future__ import annotations
+
+import html
+import json
+import mimetypes
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import unquote, urlparse
+
+
+CLIENT_ROUTE = "/__harness__/client.js"
+
+
+def resolve_target_path(target_root: Path, request_path: str) -> Path:
+    root = target_root.resolve()
+    parsed_path = unquote(urlparse(request_path).path)
+    relative = parsed_path.lstrip("/") or "index.html"
+    candidate = (root / relative).resolve()
+    if root != candidate and root not in candidate.parents:
+        raise PermissionError(f"Request path resolves outside target root: {request_path}")
+    if candidate.is_dir():
+        candidate = candidate / "index.html"
+    return candidate
+
+
+def build_injected_html(html_text: str, target_name: str) -> str:
+    bootstrap = {
+        "version": 1,
+        "targetName": target_name,
+    }
+    script = (
+        "<script>"
+        f"window.__HARNESS_BOOTSTRAP__ = {json.dumps(bootstrap)};"
+        "</script>"
+        f'<script src="{CLIENT_ROUTE}"></script>'
+    )
+    lower = html_text.lower()
+    body_index = lower.rfind("</body>")
+    if body_index == -1:
+        return html_text + script
+    return html_text[:body_index] + script + html_text[body_index:]
+
+
+class HarnessProxyHandler(BaseHTTPRequestHandler):
+    target_root: Path
+    target_name: str
+    client_path: Path
+
+    def do_GET(self) -> None:
+        if urlparse(self.path).path == CLIENT_ROUTE:
+            self._send_file(self.client_path, "application/javascript", inject=False)
+            return
+
+        try:
+            target_path = resolve_target_path(self.target_root, self.path)
+        except PermissionError as exc:
+            self.send_error(403, str(exc))
+            return
+
+        if not target_path.exists() or not target_path.is_file():
+            self.send_error(404, f"Not found: {html.escape(self.path)}")
+            return
+
+        content_type = mimetypes.guess_type(target_path.name)[0] or "application/octet-stream"
+        self._send_file(target_path, content_type, inject=content_type.startswith("text/html"))
+
+    def _send_file(self, path: Path, content_type: str, inject: bool) -> None:
+        data = path.read_bytes()
+        if inject:
+            text = data.decode("utf-8")
+            data = build_injected_html(text, self.target_name).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+
+def run_proxy_server(target_root: Path, target_name: str, host: str, port: int) -> None:
+    client_path = Path(__file__).parent / "static" / "harness_client.js"
+
+    class ConfiguredHarnessProxyHandler(HarnessProxyHandler):
+        pass
+
+    ConfiguredHarnessProxyHandler.target_root = target_root
+    ConfiguredHarnessProxyHandler.target_name = target_name
+    ConfiguredHarnessProxyHandler.client_path = client_path
+    server = ThreadingHTTPServer((host, port), ConfiguredHarnessProxyHandler)
+    print(f"Serving {target_root} as {target_name} at http://{host}:{port}")
+    server.serve_forever()

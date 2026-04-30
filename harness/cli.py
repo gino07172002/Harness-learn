@@ -28,9 +28,11 @@ def build_report_parser() -> argparse.ArgumentParser:
 
 
 def server_main() -> int:
+    from harness.proxy import run_proxy_server
+
     parser = build_server_parser()
     args = parser.parse_args()
-    print(f"Server entry parsed target={args.target} target_name={args.target_name} host={args.host} port={args.port}")
+    run_proxy_server(args.target, args.target_name, args.host, args.port)
     return 0
 
 
