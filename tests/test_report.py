@@ -19,3 +19,11 @@ def test_build_report_markdown_includes_high_signal_sections():
     assert "Events: 1" in markdown
     assert "boom" in markdown
     assert "first divergence" in markdown.lower()
+
+
+def test_report_generated_event_payload_is_stable():
+    from harness.report import build_report_generated_event
+
+    payload = build_report_generated_event("reports/simple-report.md")
+
+    assert payload == {"path": "reports/simple-report.md"}

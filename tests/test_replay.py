@@ -42,3 +42,11 @@ def test_attach_replay_result_keeps_original_trace_fields():
     assert updated["version"] == 1
     assert updated["events"] == [{"type": "click"}]
     assert updated["replay"] == result
+
+
+def test_replay_result_event_payload_is_stable():
+    from harness.replay import build_replay_completed_event
+
+    payload = build_replay_completed_event({"ok": True, "completedEvents": 3})
+
+    assert payload == {"ok": True, "completedEvents": 3}

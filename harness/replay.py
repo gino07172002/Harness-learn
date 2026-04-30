@@ -29,6 +29,13 @@ def attach_replay_result(trace: dict[str, Any], result: dict[str, Any]) -> dict[
     return updated
 
 
+def build_replay_completed_event(result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "ok": bool(result.get("ok")),
+        "completedEvents": int(result.get("completedEvents", 0)),
+    }
+
+
 async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dict[str, Any]:
     session = trace.get("session", {})
     proxy_url = session.get("proxyUrl")

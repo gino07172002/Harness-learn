@@ -3,6 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 
+def build_report_generated_event(path: str) -> dict[str, str]:
+    return {"path": path}
+
+
 def build_report_markdown(trace: dict[str, Any]) -> str:
     session = trace.get("session", {})
     events = trace.get("events", [])

@@ -17,6 +17,7 @@ def build_replay_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Replay a captured harness trace")
     parser.add_argument("trace", type=Path, help="Trace JSON file")
     parser.add_argument("--headed", action="store_true", help="Run Chromium in headed mode")
+    parser.add_argument("--run-log", type=Path, help="Optional JSONL run log path")
     return parser
 
 
@@ -24,6 +25,7 @@ def build_report_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Generate a Markdown report from a harness trace")
     parser.add_argument("trace", type=Path, help="Trace JSON file")
     parser.add_argument("--out", type=Path, help="Output Markdown path")
+    parser.add_argument("--run-log", type=Path, help="Optional JSONL run log path")
     return parser
 
 
@@ -53,20 +55,25 @@ def server_main() -> int:
 
 def replay_main() -> int:
     import json
-    from harness.replay import attach_replay_result, replay_trace
+    from harness.replay import attach_replay_result, build_replay_completed_event, replay_trace
+    from harness.run_log import RunLogger
 
     parser = build_replay_parser()
     args = parser.parse_args()
     trace = json.loads(args.trace.read_text(encoding="utf-8"))
     result = replay_trace(trace, headed=args.headed)
     args.trace.write_text(json.dumps(attach_replay_result(trace, result), indent=2), encoding="utf-8")
+    if args.run_log:
+        logger = RunLogger(args.run_log.parent, run_id=args.run_log.stem)
+        logger.record("replay.completed", **build_replay_completed_event(result))
     print(json.dumps(result, indent=2))
     return 0 if result.get("ok") else 1
 
 
 def report_main() -> int:
     import json
-    from harness.report import build_report_markdown
+    from harness.report import build_report_generated_event, build_report_markdown
+    from harness.run_log import RunLogger
 
     parser = build_report_parser()
     args = parser.parse_args()
@@ -77,6 +84,10 @@ def report_main() -> int:
         args.out.write_text(markdown, encoding="utf-8")
     else:
         print(markdown)
+    if args.run_log:
+        logger = RunLogger(args.run_log.parent, run_id=args.run_log.stem)
+        report_path = str(args.out) if args.out else "<stdout>"
+        logger.record("report.generated", **build_report_generated_event(report_path))
     return 0
 
 
