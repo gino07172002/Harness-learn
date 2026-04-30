@@ -49,7 +49,16 @@ def replay_main() -> int:
 
 
 def report_main() -> int:
+    import json
+    from harness.report import build_report_markdown
+
     parser = build_report_parser()
     args = parser.parse_args()
-    print(f"Report entry parsed trace={args.trace} out={args.out}")
+    trace = json.loads(args.trace.read_text(encoding="utf-8"))
+    markdown = build_report_markdown(trace)
+    if args.out:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(markdown, encoding="utf-8")
+    else:
+        print(markdown)
     return 0
