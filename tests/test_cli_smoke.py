@@ -34,3 +34,9 @@ def test_harness_doctor_help_exits_successfully():
     result = run_script("harness_doctor.py", "--help")
     assert result.returncode == 0
     assert "Check whether the harness can run on this machine" in result.stdout
+
+
+def test_harness_validate_trace_help_exits_successfully():
+    result = run_script("harness_validate_trace.py", "--help")
+    assert result.returncode == 0
+    assert "Validate a harness trace JSON file" in result.stdout

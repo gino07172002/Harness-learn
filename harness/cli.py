@@ -36,6 +36,12 @@ def build_doctor_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_validate_trace_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Validate a harness trace JSON file")
+    parser.add_argument("trace", type=Path, help="Trace JSON file")
+    return parser
+
+
 def server_main() -> int:
     from harness.proxy import run_proxy_server
 
@@ -82,3 +88,17 @@ def doctor_main() -> int:
     results = run_doctor_checks(args.target, args.port, args.host)
     print(render_doctor_json(results) if args.json else render_doctor_text(results), end="")
     return 0 if all(result.ok for result in results) else 1
+
+
+def validate_trace_main() -> int:
+    from harness.trace_validation import load_trace, validate_trace
+
+    parser = build_validate_trace_parser()
+    args = parser.parse_args()
+    errors = validate_trace(load_trace(args.trace))
+    if errors:
+        for error in errors:
+            print(error)
+        return 1
+    print(f"Trace valid: {args.trace}")
+    return 0
