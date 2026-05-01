@@ -181,3 +181,24 @@ def test_load_profile_reads_json_from_disk(tmp_path: Path):
     assert profile.port == 6200
     assert profile.source_path == profile_path.resolve()
     assert profile.root == profile_path.parent.resolve()
+
+
+def test_claude_profile_marks_gl_subtree_volatile():
+    """The first divergence in the file-input fixture report was
+    debugSnapshot.value.gl.available, which is environment-driven (host
+    GPU vs replay's headless software fallback) and not behavioral. The
+    claude profile must mark the entire gl subtree volatile so it does
+    not eclipse semantic differences in the divergence output."""
+    from harness.divergence import is_volatile
+
+    profile = load_profile(Path("examples/targets/claude-ref/harness.profile.json"))
+    fields = profile.volatile_fields
+
+    assert "debugSnapshot.value.gl" in fields
+    assert "debugMethodResults.snapshot.value.gl" in fields
+    # Subtree paths must be suppressed (prefix-match).
+    assert is_volatile("debugSnapshot.value.gl.available", fields)
+    assert is_volatile("debugSnapshot.value.gl.webgl2", fields)
+    assert is_volatile("debugSnapshot.value.gl.contextLost", fields)
+    # A sibling that just shares a prefix string must NOT be suppressed.
+    assert not is_volatile("debugSnapshot.value.glOther", fields)

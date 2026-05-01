@@ -8,10 +8,12 @@
   "volatileFields": [
     "debugSnapshot.value.currentAnimId",
     "debugSnapshot.value.animTime",
+    "debugSnapshot.value.gl",
     "debugTiming.value",
     "debugMethodResults.timing.value",
     "debugMethodResults.snapshot.value.currentAnimId",
     "debugMethodResults.snapshot.value.animTime",
+    "debugMethodResults.snapshot.value.gl",
     "debugMethodResults.animations.value"
   ],
   "debugMethods": [
