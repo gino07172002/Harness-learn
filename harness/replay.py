@@ -284,7 +284,23 @@ async def apply_event(page: Any, event: dict[str, Any], trace: dict[str, Any] | 
             await page.mouse.move(x, y)
             await page.mouse.up(button="left")
         else:
-            await page.mouse.click(x, y)
+            # click prefers selectorHint over raw (x, y). Coordinates drift
+            # with viewport, scroll and font size; selectors are stable as
+            # long as the target structure holds. Fall back to coordinates
+            # only when the hint is missing or doesn't resolve, so legacy
+            # traces and canvas/svg events still work.
+            selector = (event.get("target") or {}).get("selectorHint")
+            clicked = False
+            if selector:
+                locator = page.locator(selector)
+                try:
+                    if await locator.count() > 0:
+                        await locator.first.click()
+                        clicked = True
+                except Exception:
+                    clicked = False
+            if not clicked:
+                await page.mouse.click(x, y)
         return
 
     if event_type in {"keydown", "keyup"}:

@@ -218,6 +218,101 @@ def test_apply_change_event_with_empty_files_list_skips_set_input_files():
     assert page.fake_locator.dispatched == ["change"]
 
 
+class FakeClickLocator:
+    def __init__(self, exists: bool):
+        self._count = 1 if exists else 0
+        self.clicked = False
+        self.first = self
+
+    async def count(self):
+        return self._count
+
+    async def click(self):
+        if self._count == 0:
+            raise AssertionError("clicked a locator with count=0")
+        self.clicked = True
+
+
+class FakeMouse:
+    def __init__(self):
+        self.clicks: list[tuple[float, float]] = []
+
+    async def click(self, x, y):
+        self.clicks.append((x, y))
+
+    async def move(self, x, y):
+        pass
+
+
+class FakeClickPage:
+    def __init__(self, selector_exists: bool):
+        self.locator_obj = FakeClickLocator(exists=selector_exists)
+        self.mouse = FakeMouse()
+        self.requested_selectors: list[str] = []
+
+    def locator(self, selector):
+        self.requested_selectors.append(selector)
+        return self.locator_obj
+
+
+def test_apply_click_event_prefers_selector_hint_over_raw_coordinates():
+    """Walkthrough finding (2026-05-01): the simple-trace golden 'passed'
+    only because capture and replay both missed the target. Replay's click
+    must route through selectorHint when the element is present, so the
+    button actually gets clicked instead of clicking a (95, 85) point in
+    empty space."""
+    from harness.replay import apply_event
+
+    page = FakeClickPage(selector_exists=True)
+    event = {
+        "type": "click",
+        "target": {"selectorHint": "#incrementBtn"},
+        "pointer": {"x": 95, "y": 85},
+    }
+
+    asyncio.run(apply_event(page, event, trace={}))
+
+    assert page.locator_obj.clicked is True
+    assert page.mouse.clicks == [], "must not fall back to raw coords when selector hits"
+    assert page.requested_selectors == ["#incrementBtn"]
+
+
+def test_apply_click_event_falls_back_to_coords_when_selector_missing():
+    """Canvas / svg clicks have no selectorHint pointing at a real element.
+    Coordinate fallback keeps those traces replayable."""
+    from harness.replay import apply_event
+
+    page = FakeClickPage(selector_exists=False)
+    event = {
+        "type": "click",
+        "target": {"selectorHint": "#noSuchElement"},
+        "pointer": {"x": 80, "y": 120},
+    }
+
+    asyncio.run(apply_event(page, event, trace={}))
+
+    assert page.locator_obj.clicked is False
+    assert page.mouse.clicks == [(80, 120)]
+
+
+def test_apply_click_event_falls_back_to_coords_when_no_selector_hint():
+    """Pre-selector traces (or events on text nodes) have no hint at all."""
+    from harness.replay import apply_event
+
+    page = FakeClickPage(selector_exists=False)
+    event = {
+        "type": "click",
+        "target": {"tag": "div"},  # no selectorHint
+        "pointer": {"x": 50, "y": 50},
+    }
+
+    asyncio.run(apply_event(page, event, trace={}))
+
+    assert page.mouse.clicks == [(50, 50)]
+    # locator() must not even be called when there's no hint
+    assert page.requested_selectors == []
+
+
 def test_resolve_volatile_fields_uses_trace_when_no_override():
     trace = {"session": {"volatileFields": ["a", "b"]}}
 

@@ -35,6 +35,6 @@ Replay state matches captured state across all aligned snapshots.
 ## Snapshot Evidence
 
 - `capture:start` state summary: `{'ok': True, 'value': {'type': 'object', 'constructor': 'Object', 'keys': ['count', 'name', 'points']}}` debug snapshot: `{'ok': True, 'value': {'count': 0, 'nameLength': 0, 'pointCount': 0}}`
-- `after:click` state summary: `{'ok': True, 'value': {'type': 'object', 'constructor': 'Object', 'keys': ['count', 'name', 'points']}}` debug snapshot: `{'ok': True, 'value': {'count': 0, 'nameLength': 0, 'pointCount': 0}}`
-- `after:input` state summary: `{'ok': True, 'value': {'type': 'object', 'constructor': 'Object', 'keys': ['count', 'name', 'points']}}` debug snapshot: `{'ok': True, 'value': {'count': 0, 'nameLength': 0, 'pointCount': 0}}`
-- `after:click` state summary: `{'ok': True, 'value': {'type': 'object', 'constructor': 'Object', 'keys': ['count', 'name', 'points']}}` debug snapshot: `{'ok': True, 'value': {'count': 0, 'nameLength': 0, 'pointCount': 0}}`
+- `after:click` state summary: `{'ok': True, 'value': {'type': 'object', 'constructor': 'Object', 'keys': ['count', 'name', 'points']}}` debug snapshot: `{'ok': True, 'value': {'count': 1, 'nameLength': 0, 'pointCount': 0}}`
+- `after:input` state summary: `{'ok': True, 'value': {'type': 'object', 'constructor': 'Object', 'keys': ['count', 'name', 'points']}}` debug snapshot: `{'ok': True, 'value': {'count': 1, 'nameLength': 0, 'pointCount': 0}}`
+- `after:click` state summary: `{'ok': True, 'value': {'type': 'object', 'constructor': 'Object', 'keys': ['count', 'name', 'points']}}` debug snapshot: `{'ok': True, 'value': {'count': 1, 'nameLength': 0, 'pointCount': 1}}`

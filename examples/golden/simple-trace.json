@@ -88,7 +88,7 @@
       "debugSnapshot": {
         "ok": true,
         "value": {
-          "count": 0,
+          "count": 1,
           "nameLength": 0,
           "pointCount": 0
         }
@@ -125,7 +125,7 @@
       "debugSnapshot": {
         "ok": true,
         "value": {
-          "count": 0,
+          "count": 1,
           "nameLength": 0,
           "pointCount": 0
         }
@@ -162,9 +162,9 @@
       "debugSnapshot": {
         "ok": true,
         "value": {
-          "count": 0,
+          "count": 1,
           "nameLength": 0,
-          "pointCount": 0
+          "pointCount": 1
         }
       },
       "debugActionLog": {
