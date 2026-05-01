@@ -315,7 +315,7 @@ python harness_regress.py --golden examples/golden/simple-trace.json
 任何 CLI flag（`--target` / `--port` / `--host` / `--target-name`）都會 override profile 的對應值。
 
 接新 target 的最小流程：在 target 目錄放 profile json，寫 name + root + port，三個 CLI 直接吃。
-`volatileFields` 已存在 schema，但 divergence 尚未消費，留給未來使用。
+`volatileFields` 已被 divergence 全面消費（snapshot diff、error diff、預留中的 event diff 都會 forward），並且 `harness_doctor.py` 會自我驗證 wiring 沒壞 — 詳見 `docs/superpowers/specs/2026-05-01-divergence-volatility-coverage-design.md`。
 
 ### F. Profile-Driven Debug Inspectors（已完成）
 

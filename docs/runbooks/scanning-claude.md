@@ -204,4 +204,4 @@ d:/claude 那邊讀完 source 後 push back，三點都對：
 - `trace.session.debugHelp` 抓到 d:/claude 的 inline 文件
 - 9 條原始 WebGL 警告全被 filter，`trace.console` length = 0
 
-下一步可選：用這次的 capture 當素材建 `examples/golden/claude-smoke-trace.json` 真實 golden，把 d:/claude 拉進 regression。但要注意 timing/animations 等 volatile 欄位需要 normalize 規則 — `volatileFields` schema 已存在但 divergence 還沒消費，這是真正接 d:/claude 進 regression 前必補的一塊。
+下一步可選：用這次的 capture 當素材建 `examples/golden/claude-smoke-trace.json` 真實 golden，把 d:/claude 拉進 regression。timing/animations 等 volatile 欄位用 profile 的 `volatileFields` 列出即可 — divergence 會在 snapshot / error 兩條路徑同時尊重，且 `harness_doctor.py` 的 `volatility.suppression` 自我驗證會在 doctor 階段先確認 wiring 沒壞。

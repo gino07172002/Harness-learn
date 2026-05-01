@@ -47,7 +47,9 @@ NON_REPLAYABLE_EVENT_TYPES: frozenset[str] = frozenset(
 ALL_EVENT_TYPES: frozenset[str] = REPLAYABLE_EVENT_TYPES | NON_REPLAYABLE_EVENT_TYPES
 
 
-SNAPSHOT_REASONS_FIXED: frozenset[str] = frozenset({"capture:start"})
+SNAPSHOT_REASONS_FIXED: frozenset[str] = frozenset(
+    {"capture:start", "capture:stop", "capture:save"}
+)
 
 
 def is_allowed_snapshot_reason(reason: Any) -> bool:
@@ -80,9 +82,13 @@ KNOWN_SESSION_FIELDS: frozenset[str] = frozenset(
     {
         "id",
         "targetName",
+        "targetRoot",
         "proxyUrl",
+        "url",
         "viewport",
         "harnessRunId",
+        "controller",
+        "mode",
         "debugMethods",
         "stateGlobals",
         "consoleIgnorePatterns",

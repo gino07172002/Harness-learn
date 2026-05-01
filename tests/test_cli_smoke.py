@@ -46,3 +46,17 @@ def test_harness_regress_help_exits_successfully():
     result = run_script("harness_regress.py", "--help")
     assert result.returncode == 0
     assert "Run golden trace regression" in result.stdout
+
+
+def test_validate_trace_strict_passes_realistic_session_fixture():
+    """Strict mode promotes warnings to errors. A realistic fixture that
+    includes the live session fields, capture:save snapshot reason, and
+    the environmentFixture / fileFixtures top-level objects must pass."""
+    result = run_script(
+        "harness_validate_trace.py",
+        "--strict",
+        "examples/golden/realistic-session-trace.json",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Trace valid" in result.stdout
+    assert "warnings:" not in result.stdout
