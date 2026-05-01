@@ -106,6 +106,34 @@ def test_render_doctor_text_shows_hint_on_failure():
     assert "duration: 312 ms" in text
 
 
+def test_render_doctor_text_summary_lists_failed_checks_when_any_fail():
+    """Walkthrough finding (2026-05-01): a long ok=true block can hide a
+    single fail in CI logs. The trailing SUMMARY line gives a one-shot
+    verdict you can grep for or read off the tail."""
+    from harness.doctor import render_doctor_text
+
+    text = render_doctor_text([
+        CheckResult("python.version", True, "Python 3.13"),
+        CheckResult("port.available", False, "Port 6173 is already in use"),
+        CheckResult("target.index_html", False, "Target path does not exist"),
+    ])
+
+    last_line = text.strip().splitlines()[-1]
+    assert last_line == "SUMMARY: 2 failed (port.available, target.index_html), 1 ok"
+
+
+def test_render_doctor_text_summary_says_all_passed_when_clean():
+    from harness.doctor import render_doctor_text
+
+    text = render_doctor_text([
+        CheckResult("python.version", True, "Python 3.13"),
+        CheckResult("port.available", True, "Port 6173 is available"),
+    ])
+
+    last_line = text.strip().splitlines()[-1]
+    assert last_line == "SUMMARY: all 2 checks passed"
+
+
 def test_render_doctor_text_shows_detail_on_success():
     from harness.doctor import render_doctor_text
 

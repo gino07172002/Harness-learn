@@ -345,6 +345,14 @@ def render_doctor_text(results: Iterable[CheckResult]) -> str:
                 lines.append(f"    hint: {item.hint}")
             if item.duration_ms:
                 lines.append(f"    duration: {item.duration_ms} ms")
+    # Trailing summary so callers and CI logs can read the last line for a
+    # one-shot verdict without scanning the per-check block. Keep the
+    # `ok: <bool>` second line untouched so existing parsers still work.
+    failed = [item.name for item in items if not item.ok]
+    if failed:
+        lines.append(f"SUMMARY: {len(failed)} failed ({', '.join(failed)}), {len(items) - len(failed)} ok")
+    else:
+        lines.append(f"SUMMARY: all {len(items)} checks passed")
     return "\n".join(lines) + "\n"
 
 
