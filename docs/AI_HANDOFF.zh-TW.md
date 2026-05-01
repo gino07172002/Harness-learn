@@ -311,7 +311,7 @@ python harness_doctor.py --profile examples/targets/simple/harness.profile.json
 python harness_regress.py --golden examples/golden/simple-trace.json
 ```
 
-`harness_regress.py` 預設指向 simple profile，所以舊用法不變。
+`harness_regress.py` 沒有指定 `--profile` 且需要 spawn fixture server 時，會自動 fallback 到 simple profile *只供 server 設定*（target / port / host）；volatility policy 此時走 trace 自帶的 list，不會被 simple profile 的空 list 蓋掉。指定 `--profile` 才會 override 到 profile 的 volatileFields（架構決策見 `docs/decisions.md`）。
 任何 CLI flag（`--target` / `--port` / `--host` / `--target-name`）都會 override profile 的對應值。
 
 接新 target 的最小流程：在 target 目錄放 profile json，寫 name + root + port，三個 CLI 直接吃。

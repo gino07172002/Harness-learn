@@ -25,11 +25,17 @@ trace's frozen list) and `extra_volatile_fields` (appends). The CLIs
 expose this as `replay_runner.py --profile / --volatile-field` and
 `harness_regress.py --volatile-field / --ignore-trace-volatile-fields`.
 
-`harness_regress.py` defaults to using the profile's `volatileFields` as
-the override (matching the architecture decision); the trace's frozen
-list is the fallback when no profile is in effect. The trace continues
-to record the policy at capture time as historical context, but it is
-no longer load-bearing if a profile is supplied.
+`harness_regress.py` uses the profile's `volatileFields` as the override
+*only when the user actually passes `--profile`* (matching the
+architecture decision); when `--profile` is omitted, the trace's frozen
+list is the fallback. An earlier iteration of this fix had the parser
+default `--profile` to the simple profile silently, which made the
+override path always fire and dropped the trace's policy. The parser
+default is now `None`; the simple profile is only injected as a target /
+port fallback when the regress flow needs to spawn a fixture server.
+
+The trace continues to record the policy at capture time as historical
+context, but it is no longer load-bearing if a profile is supplied.
 
 Alternative considered: stop writing `volatileFields` into the trace
 entirely and have replay always re-read the profile. Rejected because

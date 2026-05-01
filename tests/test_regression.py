@@ -27,6 +27,75 @@ def test_compare_reports_explains_mismatch():
     assert "normalized report differs" in errors[0]
 
 
+def test_resolve_regress_volatility_falls_back_to_trace_when_no_profile():
+    """Codex review (post 1db2223): the regress CLI implicitly defaulted
+    --profile to the simple profile, so the override path always fired
+    and the trace's frozen volatileFields were silently dropped. The
+    helper must return override=None when the user did NOT supply
+    --profile, so replay falls back to the trace's list."""
+    from harness.cli import resolve_regress_volatility
+
+    override, extra = resolve_regress_volatility(
+        user_supplied_profile=False,
+        profile_volatile_fields=(),  # what an empty/loaded simple profile gives
+        ignore_trace_volatile_fields=False,
+        extra_volatile_fields=[],
+    )
+
+    assert override is None, "must fall back to trace when user did not supply --profile"
+    assert extra is None
+
+
+def test_resolve_regress_volatility_uses_profile_when_user_supplied():
+    from harness.cli import resolve_regress_volatility
+
+    override, extra = resolve_regress_volatility(
+        user_supplied_profile=True,
+        profile_volatile_fields=("a", "b"),
+        ignore_trace_volatile_fields=False,
+        extra_volatile_fields=[],
+    )
+
+    assert override == ["a", "b"]
+    assert extra is None
+
+
+def test_resolve_regress_volatility_ignore_flag_forces_empty_override_without_profile():
+    from harness.cli import resolve_regress_volatility
+
+    override, extra = resolve_regress_volatility(
+        user_supplied_profile=False,
+        profile_volatile_fields=None,
+        ignore_trace_volatile_fields=True,
+        extra_volatile_fields=[],
+    )
+
+    assert override == []
+    assert extra is None
+
+
+def test_resolve_regress_volatility_appends_extra_in_all_modes():
+    from harness.cli import resolve_regress_volatility
+
+    # Fallback mode + extra
+    override, extra = resolve_regress_volatility(
+        user_supplied_profile=False,
+        profile_volatile_fields=(),
+        ignore_trace_volatile_fields=False,
+        extra_volatile_fields=["x"],
+    )
+    assert override is None and extra == ["x"]
+
+    # Override mode + extra
+    override, extra = resolve_regress_volatility(
+        user_supplied_profile=True,
+        profile_volatile_fields=("a",),
+        ignore_trace_volatile_fields=False,
+        extra_volatile_fields=["x"],
+    )
+    assert override == ["a"] and extra == ["x"]
+
+
 def test_run_report_regression_forwards_volatile_override(tmp_path, monkeypatch):
     """Codex review follow-up: comparison-time volatility must come from
     profile, not from the trace's frozen list. Confirm the kwargs reach

@@ -131,11 +131,45 @@ def build_validate_trace_parser() -> argparse.ArgumentParser:
     return parser
 
 
+DEFAULT_REGRESS_SERVER_PROFILE = Path("examples/targets/simple/harness.profile.json")
+
+
+def resolve_regress_volatility(
+    user_supplied_profile: bool,
+    profile_volatile_fields: tuple[str, ...] | list[str] | None,
+    ignore_trace_volatile_fields: bool,
+    extra_volatile_fields: list[str] | None,
+) -> tuple[list[str] | None, list[str] | None]:
+    """Resolve the (override, extra) pair the regress flow passes to replay.
+
+    Rules:
+    - If the user passed --profile, that profile's list overrides whatever
+      was frozen into the trace at capture time (architecture decision in
+      docs/decisions.md).
+    - --ignore-trace-volatile-fields forces an empty base when no profile
+      is in effect.
+    - Otherwise, return None so replay falls back to the trace's frozen list.
+    - --volatile-field is always appended.
+    """
+    if user_supplied_profile and profile_volatile_fields is not None:
+        override: list[str] | None = list(profile_volatile_fields)
+    elif ignore_trace_volatile_fields:
+        override = []
+    else:
+        override = None
+    extra = list(extra_volatile_fields) if extra_volatile_fields else None
+    return override, extra
+
+
 def build_regress_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run golden trace regression")
     parser.add_argument("--golden", type=Path, required=True, help="Golden trace JSON path")
     parser.add_argument("--report", type=Path, help="Golden report Markdown path")
-    parser.add_argument("--profile", type=Path, default=Path("examples/targets/simple/harness.profile.json"), help="Path to a harness.profile.json (defaults sourced from it)")
+    # Default is None so the regress flow can tell apart "user did not say"
+    # from "user picked a profile". Without that distinction the volatility
+    # resolution would override the trace's frozen list with an empty profile
+    # policy whenever the user did not pass --profile.
+    parser.add_argument("--profile", type=Path, default=None, help="Path to a harness.profile.json (defaults sourced from it)")
     parser.add_argument("--target", type=Path, help="Target directory (overrides profile)")
     parser.add_argument("--target-name", help="Target name (overrides profile)")
     parser.add_argument("--host", help="Fixture server host (overrides profile)")
@@ -298,7 +332,19 @@ def regress_main() -> int:
     parser = build_regress_parser()
     args = parser.parse_args()
     golden_report = args.report or args.golden.with_name(args.golden.stem.replace("-trace", "-report") + ".md")
-    settings = resolve_target_settings(args, require_target=not args.no_server)
+
+    user_supplied_profile = args.profile is not None
+
+    # When the user did not specify --profile and we need to start a fixture
+    # server, fall back to the simple profile *only for server defaults*
+    # (target, port, host) — not for volatility, debug methods, etc. Mutating
+    # args here keeps resolve_target_settings happy without bleeding the
+    # fallback into volatility resolution.
+    needs_server = not args.no_server
+    if needs_server and args.profile is None and args.target is None:
+        args.profile = DEFAULT_REGRESS_SERVER_PROFILE
+
+    settings = resolve_target_settings(args, require_target=needs_server)
 
     if args.no_server:
         server_ctx = nullcontext()
@@ -311,18 +357,12 @@ def regress_main() -> int:
             startup_timeout=args.server_startup_timeout,
         )
 
-    # Volatility policy at comparison time:
-    #   - if a profile is in effect, its volatileFields override what the
-    #     trace froze at capture time (matches docs/decisions.md).
-    #   - --ignore-trace-volatile-fields forces an empty base when no profile.
-    #   - --volatile-field always appends.
-    if settings.get("volatile_fields") is not None:
-        override = list(settings["volatile_fields"])
-    elif args.ignore_trace_volatile_fields:
-        override = []
-    else:
-        override = None
-    extra = list(args.volatile_fields) if args.volatile_fields else None
+    override, extra = resolve_regress_volatility(
+        user_supplied_profile=user_supplied_profile,
+        profile_volatile_fields=settings.get("volatile_fields"),
+        ignore_trace_volatile_fields=args.ignore_trace_volatile_fields,
+        extra_volatile_fields=args.volatile_fields,
+    )
 
     with server_ctx:
         errors = run_report_regression(
