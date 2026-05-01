@@ -2,9 +2,88 @@ from __future__ import annotations
 
 from typing import Any
 
+from harness.divergence import diff_value
+
 
 def build_report_generated_event(path: str) -> dict[str, str]:
     return {"path": path}
+
+
+def _path_value(obj: Any, path: str) -> Any:
+    current = obj
+    for part in path.split("."):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+    return current
+
+
+def _intent_diagnostics(trace: dict[str, Any]) -> list[dict[str, Any]]:
+    replay = trace.get("replay")
+    if not isinstance(replay, dict):
+        return []
+
+    events = trace.get("events", [])
+    capture_snapshots = trace.get("snapshots", [])
+    replay_snapshots = replay.get("snapshots", [])
+    if not isinstance(events, list) or not isinstance(replay_snapshots, list):
+        return []
+
+    by_selector: dict[str, dict[str, Any]] = {}
+    for index, event in enumerate(events):
+        if not isinstance(event, dict):
+            continue
+        selector = ((event.get("target") or {}).get("selectorHint") or "").strip()
+        if not selector:
+            continue
+        bucket = by_selector.setdefault(
+            selector,
+            {"pointerdown": 0, "pointerup": 0, "click": 0, "first_pointerup": None},
+        )
+        event_type = event.get("type")
+        if event_type in {"pointerdown", "pointerup", "click"}:
+            bucket[event_type] += 1
+        if event_type == "pointerup" and bucket["first_pointerup"] is None:
+            bucket["first_pointerup"] = index
+
+    volatile_fields = list((trace.get("session") or {}).get("volatileFields") or [])
+    volatile_fields.extend(["debugSnapshot.value.gl", "debugMethodResults.snapshot.value.gl"])
+
+    findings: list[dict[str, Any]] = []
+    limit = min(len(capture_snapshots), len(replay_snapshots))
+    for selector, counts in by_selector.items():
+        if counts["pointerdown"] < 3 or counts["pointerup"] < 3 or counts["click"] != 0:
+            continue
+        start_index = counts["first_pointerup"]
+        if start_index is None:
+            continue
+
+        # Snapshot 0 is capture:start; snapshot N+1 corresponds to event N.
+        for step in range(start_index + 1, limit):
+            diff = diff_value(
+                capture_snapshots[step].get("debugSnapshot"),
+                replay_snapshots[step].get("debugSnapshot"),
+                "debugSnapshot",
+                volatile_fields,
+            )
+            if diff is None:
+                continue
+            path, expected, actual = diff
+            baseline = _path_value(capture_snapshots[0], path)
+            if baseline != expected:
+                continue
+            findings.append({
+                "selector": selector,
+                "pointerdown": counts["pointerdown"],
+                "pointerup": counts["pointerup"],
+                "click": counts["click"],
+                "step": step,
+                "path": path,
+                "expected": expected,
+                "actual": actual,
+            })
+            break
+    return findings
 
 
 def build_report_markdown(trace: dict[str, Any]) -> str:
@@ -87,6 +166,20 @@ def build_report_markdown(trace: dict[str, Any]) -> str:
         )
     else:
         lines.append("Replay state matches captured state across all aligned snapshots.")
+
+    intent_findings = _intent_diagnostics(trace)
+    lines.extend(["", "## Intent Diagnostics", ""])
+    if intent_findings:
+        for finding in intent_findings[:10]:
+            lines.append(
+                f"- Possible failed intent on `{finding['selector']}`: "
+                f"pointerdown/up: `{finding['pointerdown']}/{finding['pointerup']}`, "
+                f"clicks: `{finding['click']}`, first state split at step `{finding['step']}` "
+                f"on `{finding['path']}`; capture stayed `{finding['expected']}`; "
+                f"replay reached `{finding['actual']}`."
+            )
+    else:
+        lines.append("No repeated pointer intent failures were detected.")
 
     lines.extend(["", "## Snapshot Evidence", ""])
     for snapshot in snapshots[:20]:
