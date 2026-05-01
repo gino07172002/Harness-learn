@@ -60,11 +60,33 @@ def build_report_markdown(trace: dict[str, Any]) -> str:
     elif replay.get("ok"):
         lines.append(f"Replay passed after `{replay.get('completedEvents', 0)}` event(s).")
     else:
-        lines.append("Replay failed; first divergence is listed below.")
+        lines.append("Replay failed; first failure is listed below.")
         lines.append("")
         lines.append("```json")
         lines.append(str(replay.get("firstFailure")))
         lines.append("```")
+
+    lines.extend(["", "## Divergence", ""])
+    divergence = (replay or {}).get("divergence") if replay else None
+    first_failure = (replay or {}).get("firstFailure") if replay else None
+    if replay is None:
+        lines.append("Replay has not been run for this trace.")
+    elif divergence is not None:
+        lines.append(
+            f"First divergence at step `{divergence.get('stepIndex')}` "
+            f"(reason `{divergence.get('reason', '<n/a>')}`, kind `{divergence.get('kind')}`)."
+        )
+        lines.append("")
+        lines.append(f"- Path: `{divergence.get('path')}`")
+        lines.append(f"- Expected: `{divergence.get('expected')}`")
+        lines.append(f"- Actual: `{divergence.get('actual')}`")
+    elif first_failure is not None:
+        lines.append(
+            f"Replay aborted before state comparison; first divergence is the failed event "
+            f"at index `{first_failure.get('eventIndex')}` (`{first_failure.get('eventType')}`)."
+        )
+    else:
+        lines.append("Replay state matches captured state across all aligned snapshots.")
 
     lines.extend(["", "## Snapshot Evidence", ""])
     for snapshot in snapshots[:20]:

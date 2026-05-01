@@ -51,7 +51,35 @@
       "debugSnapshot": {
         "ok": true,
         "value": {
-          "count": 0
+          "count": 0,
+          "nameLength": 0,
+          "pointCount": 0
+        }
+      },
+      "debugActionLog": {
+        "ok": true,
+        "value": []
+      },
+      "debugErrors": {
+        "ok": true,
+        "value": []
+      },
+      "debugTiming": {
+        "ok": true,
+        "value": {
+          "frameMs": 0
+        }
+      },
+      "stateSummary": {
+        "ok": true,
+        "value": {
+          "type": "object",
+          "constructor": "Object",
+          "keys": [
+            "count",
+            "name",
+            "points"
+          ]
         }
       }
     },
@@ -60,7 +88,109 @@
       "debugSnapshot": {
         "ok": true,
         "value": {
-          "count": 1
+          "count": 0,
+          "nameLength": 0,
+          "pointCount": 0
+        }
+      },
+      "debugActionLog": {
+        "ok": true,
+        "value": []
+      },
+      "debugErrors": {
+        "ok": true,
+        "value": []
+      },
+      "debugTiming": {
+        "ok": true,
+        "value": {
+          "frameMs": 0
+        }
+      },
+      "stateSummary": {
+        "ok": true,
+        "value": {
+          "type": "object",
+          "constructor": "Object",
+          "keys": [
+            "count",
+            "name",
+            "points"
+          ]
+        }
+      }
+    },
+    {
+      "reason": "after:input",
+      "debugSnapshot": {
+        "ok": true,
+        "value": {
+          "count": 0,
+          "nameLength": 0,
+          "pointCount": 0
+        }
+      },
+      "debugActionLog": {
+        "ok": true,
+        "value": []
+      },
+      "debugErrors": {
+        "ok": true,
+        "value": []
+      },
+      "debugTiming": {
+        "ok": true,
+        "value": {
+          "frameMs": 0
+        }
+      },
+      "stateSummary": {
+        "ok": true,
+        "value": {
+          "type": "object",
+          "constructor": "Object",
+          "keys": [
+            "count",
+            "name",
+            "points"
+          ]
+        }
+      }
+    },
+    {
+      "reason": "after:click",
+      "debugSnapshot": {
+        "ok": true,
+        "value": {
+          "count": 0,
+          "nameLength": 0,
+          "pointCount": 0
+        }
+      },
+      "debugActionLog": {
+        "ok": true,
+        "value": []
+      },
+      "debugErrors": {
+        "ok": true,
+        "value": []
+      },
+      "debugTiming": {
+        "ok": true,
+        "value": {
+          "frameMs": 0
+        }
+      },
+      "stateSummary": {
+        "ok": true,
+        "value": {
+          "type": "object",
+          "constructor": "Object",
+          "keys": [
+            "count",
+            "name",
+            "points"
+          ]
         }
       }
     }
@@ -73,6 +203,157 @@
     "completedEvents": 3,
     "firstFailure": null,
     "console": [],
-    "errors": []
+    "errors": [],
+    "snapshots": [
+      {
+        "reason": "capture:start",
+        "debugSnapshot": {
+          "ok": true,
+          "value": {
+            "count": 0,
+            "nameLength": 0,
+            "pointCount": 0
+          }
+        },
+        "debugActionLog": {
+          "ok": true,
+          "value": []
+        },
+        "debugErrors": {
+          "ok": true,
+          "value": []
+        },
+        "debugTiming": {
+          "ok": true,
+          "value": {
+            "frameMs": 0
+          }
+        },
+        "stateSummary": {
+          "ok": true,
+          "value": {
+            "type": "object",
+            "constructor": "Object",
+            "keys": [
+              "count",
+              "name",
+              "points"
+            ]
+          }
+        }
+      },
+      {
+        "reason": "after:click",
+        "debugSnapshot": {
+          "ok": true,
+          "value": {
+            "count": 0,
+            "nameLength": 0,
+            "pointCount": 0
+          }
+        },
+        "debugActionLog": {
+          "ok": true,
+          "value": []
+        },
+        "debugErrors": {
+          "ok": true,
+          "value": []
+        },
+        "debugTiming": {
+          "ok": true,
+          "value": {
+            "frameMs": 0
+          }
+        },
+        "stateSummary": {
+          "ok": true,
+          "value": {
+            "type": "object",
+            "constructor": "Object",
+            "keys": [
+              "count",
+              "name",
+              "points"
+            ]
+          }
+        }
+      },
+      {
+        "reason": "after:input",
+        "debugSnapshot": {
+          "ok": true,
+          "value": {
+            "count": 0,
+            "nameLength": 0,
+            "pointCount": 0
+          }
+        },
+        "debugActionLog": {
+          "ok": true,
+          "value": []
+        },
+        "debugErrors": {
+          "ok": true,
+          "value": []
+        },
+        "debugTiming": {
+          "ok": true,
+          "value": {
+            "frameMs": 0
+          }
+        },
+        "stateSummary": {
+          "ok": true,
+          "value": {
+            "type": "object",
+            "constructor": "Object",
+            "keys": [
+              "count",
+              "name",
+              "points"
+            ]
+          }
+        }
+      },
+      {
+        "reason": "after:click",
+        "debugSnapshot": {
+          "ok": true,
+          "value": {
+            "count": 0,
+            "nameLength": 0,
+            "pointCount": 0
+          }
+        },
+        "debugActionLog": {
+          "ok": true,
+          "value": []
+        },
+        "debugErrors": {
+          "ok": true,
+          "value": []
+        },
+        "debugTiming": {
+          "ok": true,
+          "value": {
+            "frameMs": 0
+          }
+        },
+        "stateSummary": {
+          "ok": true,
+          "value": {
+            "type": "object",
+            "constructor": "Object",
+            "keys": [
+              "count",
+              "name",
+              "points"
+            ]
+          }
+        }
+      }
+    ],
+    "divergence": null
   }
 }

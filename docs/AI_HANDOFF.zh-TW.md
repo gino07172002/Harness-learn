@@ -95,15 +95,7 @@ harness_doctor.py: HARNESS_DOCTOR / ok: true
 
 ## Golden Regression
 
-Golden regression 需要 fixture server 正在運行。
-
-Terminal 1：
-
-```powershell
-python harness_server.py --target examples/targets/simple --target-name simple --port 6173
-```
-
-Terminal 2：
+Golden regression 現在是單一命令，會自己起 fixture server、跑驗證、再關掉。
 
 ```powershell
 python harness_regress.py --golden examples/golden/simple-trace.json
@@ -113,6 +105,18 @@ python harness_regress.py --golden examples/golden/simple-trace.json
 
 ```text
 Golden regression passed: examples\golden\simple-trace.json
+```
+
+如果你已經自己起好 fixture server（或在某個受限環境不能 spawn subprocess），加 `--no-server`：
+
+```powershell
+python harness_regress.py --golden examples/golden/simple-trace.json --no-server
+```
+
+也可以覆寫預設的 target/host/port：
+
+```powershell
+python harness_regress.py --golden ... --target ... --target-name ... --host ... --port ...
 ```
 
 ## 完整手動 Walkthrough
@@ -248,38 +252,37 @@ harness_doctor.py output
 
 下一階段可以從這些方向選：
 
-### A. CI / Automation
+### A. CI / Automation（已完成）
 
-讓 GitHub Actions 或本地 CI 自動跑：
+GitHub Actions workflow 在 `.github/workflows/harness-ci.yml`，每次 push / PR 跑：
 
 ```text
 pytest
 node --check harness_client.js
-doctor
-golden regression
+harness_doctor
+golden regression（self-contained）
 ```
 
-### B. Self-Contained Golden Regression
+失敗時會把 `traces/` `reports/` `runs/` 當 artifact 上傳供 debug。
 
-目前 `harness_regress.py` 需要 fixture server 先手動啟動。
+### B. Self-Contained Golden Regression（已完成）
 
-可以改成 regression command 自己：
+`harness_regress.py` 現在會自己 spawn fixture server、等 health、跑驗證、teardown。
+舊的「外部 server + --no-server」流程仍保留作為 escape hatch。
+參見 `harness/regression.py:managed_fixture_server`。
+
+### C. Replay Divergence Diff（已完成）
+
+Replay 現在會在每個 replayable event 後取一次 snapshot，與 capture 對齊比對。
+產出寫進 `trace.replay.divergence`：
 
 ```text
-start fixture server
-run regression
-stop fixture server
+{ stepIndex, reason, kind: snapshot|error, path, expected, actual }
 ```
 
-### C. Replay Divergence Diff
-
-目前 replay 會回報成功/失敗，但還不夠會說：
-
-```text
-第幾步開始 state 不一樣
-哪個 snapshot field 改變
-console/error 在哪一步出現
-```
+Report 多了 `## Divergence` section 顯示首個 diverging field。
+純函式邏輯在 `harness/divergence.py`，單元測試在 `tests/test_divergence.py`。
+Snapshot 對齊規則：capture snapshots 過濾出 reason ∈ {`capture:start`, `after:<replayable_type>`}，與 replay 端產生的同序列逐項比對。
 
 ### D. CDP / GDB-Like Debugging
 
@@ -295,18 +298,24 @@ performance trace
 breakpoint control
 ```
 
-### E. Target Profiles
+### E. Target Profiles（已完成）
 
-讓不同 target 有自己的 config：
+每個 target 可在自己的目錄放一份 `harness.profile.json`，描述 name / root / host / port / startupPath / stateGlobals / volatileFields。
+參考實作：`examples/targets/simple/harness.profile.json`。
 
-```text
-target name
-target root
-startup URL
-state globals
-snapshot functions
-ignored volatile fields
+`harness_server.py` / `harness_doctor.py` / `harness_regress.py` 三個 CLI 都吃 `--profile`：
+
+```powershell
+python harness_server.py --profile examples/targets/simple/harness.profile.json
+python harness_doctor.py --profile examples/targets/simple/harness.profile.json
+python harness_regress.py --golden examples/golden/simple-trace.json
 ```
+
+`harness_regress.py` 預設指向 simple profile，所以舊用法不變。
+任何 CLI flag（`--target` / `--port` / `--host` / `--target-name`）都會 override profile 的對應值。
+
+接新 target 的最小流程：在 target 目錄放 profile json，寫 name + root + port，三個 CLI 直接吃。
+`stateGlobals` 與 `volatileFields` 已存在 schema，但 client.js 與 divergence 尚未消費，留給未來使用。
 
 ## 建議新 Agent 的第一個回覆
 

@@ -2,14 +2,37 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Any
+
+
+def resolve_target_settings(args: argparse.Namespace, *, require_target: bool = True) -> dict[str, Any]:
+    from harness.profile import load_profile
+
+    profile = load_profile(args.profile) if getattr(args, "profile", None) else None
+
+    def pick(attr: str, profile_value: Any, fallback: Any) -> Any:
+        cli_value = getattr(args, attr, None)
+        if cli_value is not None:
+            return cli_value
+        return profile_value if profile is not None else fallback
+
+    target = pick("target", profile.root if profile else None, None)
+    target_name = pick("target_name", profile.name if profile else None, "target")
+    host = pick("host", profile.host if profile else None, "127.0.0.1")
+    port = pick("port", profile.port if profile else None, 6173)
+
+    if require_target and target is None:
+        raise SystemExit("error: --target is required (or pass --profile)")
+    return {"target": target, "target_name": target_name, "host": host, "port": port}
 
 
 def build_server_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Zero-mod browser debug harness server")
-    parser.add_argument("--target", type=Path, required=True, help="Target app directory to serve read-only")
-    parser.add_argument("--target-name", default="target", help="Human-readable target name")
-    parser.add_argument("--port", type=int, default=6173, help="Proxy server port")
-    parser.add_argument("--host", default="127.0.0.1", help="Proxy server host")
+    parser.add_argument("--profile", type=Path, help="Path to a harness.profile.json (defaults sourced from it)")
+    parser.add_argument("--target", type=Path, help="Target app directory to serve read-only")
+    parser.add_argument("--target-name", help="Human-readable target name")
+    parser.add_argument("--port", type=int, help="Proxy server port")
+    parser.add_argument("--host", help="Proxy server host")
     return parser
 
 
@@ -31,9 +54,10 @@ def build_report_parser() -> argparse.ArgumentParser:
 
 def build_doctor_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Check whether the harness can run on this machine")
-    parser.add_argument("--target", type=Path, required=True, help="Target app directory to verify")
-    parser.add_argument("--port", type=int, default=6173, help="Port to check")
-    parser.add_argument("--host", default="127.0.0.1", help="Host to check")
+    parser.add_argument("--profile", type=Path, help="Path to a harness.profile.json (defaults sourced from it)")
+    parser.add_argument("--target", type=Path, help="Target app directory to verify")
+    parser.add_argument("--port", type=int, help="Port to check")
+    parser.add_argument("--host", help="Host to check")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
     return parser
 
@@ -48,6 +72,13 @@ def build_regress_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run golden trace regression")
     parser.add_argument("--golden", type=Path, required=True, help="Golden trace JSON path")
     parser.add_argument("--report", type=Path, help="Golden report Markdown path")
+    parser.add_argument("--profile", type=Path, default=Path("examples/targets/simple/harness.profile.json"), help="Path to a harness.profile.json (defaults sourced from it)")
+    parser.add_argument("--target", type=Path, help="Target directory (overrides profile)")
+    parser.add_argument("--target-name", help="Target name (overrides profile)")
+    parser.add_argument("--host", help="Fixture server host (overrides profile)")
+    parser.add_argument("--port", type=int, help="Fixture server port (overrides profile)")
+    parser.add_argument("--no-server", action="store_true", help="Skip starting a fixture server (assume one is already running)")
+    parser.add_argument("--server-startup-timeout", type=float, default=15.0, help="Seconds to wait for the fixture server to become healthy")
     return parser
 
 
@@ -56,7 +87,8 @@ def server_main() -> int:
 
     parser = build_server_parser()
     args = parser.parse_args()
-    run_proxy_server(args.target, args.target_name, args.host, args.port)
+    settings = resolve_target_settings(args)
+    run_proxy_server(settings["target"], settings["target_name"], settings["host"], settings["port"])
     return 0
 
 
@@ -103,7 +135,8 @@ def doctor_main() -> int:
 
     parser = build_doctor_parser()
     args = parser.parse_args()
-    results = run_doctor_checks(args.target, args.port, args.host)
+    settings = resolve_target_settings(args)
+    results = run_doctor_checks(settings["target"], settings["port"], settings["host"])
     print(render_doctor_json(results) if args.json else render_doctor_text(results), end="")
     return 0 if all(result.ok for result in results) else 1
 
@@ -123,12 +156,29 @@ def validate_trace_main() -> int:
 
 
 def regress_main() -> int:
-    from harness.regression import run_report_regression
+    from contextlib import nullcontext
+
+    from harness.regression import managed_fixture_server, run_report_regression
 
     parser = build_regress_parser()
     args = parser.parse_args()
     golden_report = args.report or args.golden.with_name(args.golden.stem.replace("-trace", "-report") + ".md")
-    errors = run_report_regression(args.golden, golden_report)
+    settings = resolve_target_settings(args, require_target=not args.no_server)
+
+    if args.no_server:
+        server_ctx = nullcontext()
+    else:
+        server_ctx = managed_fixture_server(
+            target=settings["target"],
+            target_name=settings["target_name"],
+            host=settings["host"],
+            port=settings["port"],
+            startup_timeout=args.server_startup_timeout,
+        )
+
+    with server_ctx:
+        errors = run_report_regression(args.golden, golden_report)
+
     if errors:
         for error in errors:
             print(error)

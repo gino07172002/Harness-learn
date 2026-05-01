@@ -1,0 +1,58 @@
+name: harness-ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run pytest
+        run: python -m pytest -v
+
+      - name: Syntax-check harness_client.js
+        run: node --check harness/static/harness_client.js
+
+      - name: Run harness doctor
+        run: python harness_doctor.py --target examples/targets/simple --port 6173
+
+      - name: Run golden regression (self-contained)
+        run: python harness_regress.py --golden examples/golden/simple-trace.json
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-artifacts
+          path: |
+            traces/
+            reports/
+            runs/
+          if-no-files-found: ignore
+          retention-days: 7

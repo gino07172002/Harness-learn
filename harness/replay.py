@@ -5,6 +5,39 @@ from typing import Any
 
 from playwright.async_api import async_playwright
 
+from harness.divergence import find_first_divergence
+
+
+SNAPSHOT_JS = """
+(() => {
+  function summarizeValue(value) {
+    if (value === null) return null;
+    const t = typeof value;
+    if (t === 'string') return { type: 'string', length: value.length, sample: value.slice(0, 80) };
+    if (t === 'number' || t === 'boolean') return value;
+    if (Array.isArray(value)) return { type: 'array', length: value.length, sample: value.slice(0, 5) };
+    if (t === 'object') return { type: 'object', constructor: value.constructor ? value.constructor.name : 'Object', keys: Object.keys(value).slice(0, 30) };
+    return { type: t };
+  }
+  function safeCall(fn) {
+    try { return { ok: true, value: fn() }; }
+    catch (e) { return { ok: false, error: String(e && e.message ? e.message : e) }; }
+  }
+  const out = { debugSnapshot: null, debugActionLog: null, debugErrors: null, debugTiming: null, stateSummary: null };
+  if (window.debug && typeof window.debug.snapshot === 'function') out.debugSnapshot = safeCall(() => window.debug.snapshot());
+  if (window.debug && typeof window.debug.actionLog === 'function') out.debugActionLog = safeCall(() => window.debug.actionLog());
+  if (window.debug && typeof window.debug.errors === 'function') out.debugErrors = safeCall(() => window.debug.errors());
+  if (window.debug && typeof window.debug.timing === 'function') out.debugTiming = safeCall(() => window.debug.timing());
+  if ('state' in window) out.stateSummary = safeCall(() => summarizeValue(window.state));
+  return out;
+})()
+"""
+
+
+async def take_replay_snapshot(page: Any, reason: str) -> dict[str, Any]:
+    payload = await page.evaluate(SNAPSHOT_JS)
+    return {"reason": reason, **payload}
+
 
 REPLAYABLE_TYPES = {
     "pointerdown",
@@ -45,6 +78,7 @@ async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dic
 
     replay_console: list[dict[str, Any]] = []
     replay_errors: list[dict[str, Any]] = []
+    replay_snapshots: list[dict[str, Any]] = []
 
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=not headed)
@@ -53,12 +87,15 @@ async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dic
         page.on("pageerror", lambda exc: replay_errors.append({"message": str(exc)}))
         await page.goto(proxy_url)
 
+        replay_snapshots.append(await take_replay_snapshot(page, "capture:start"))
+
         completed = 0
         first_failure = None
         for index, event in enumerate(replayable_events(trace)):
             try:
                 await apply_event(page, event)
                 completed += 1
+                replay_snapshots.append(await take_replay_snapshot(page, "after:" + str(event.get("type"))))
             except Exception as exc:
                 first_failure = {
                     "eventIndex": index,
@@ -69,13 +106,27 @@ async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dic
 
         await browser.close()
 
-    return {
+    aligned_capture = align_capture_snapshots(trace.get("snapshots", []))
+
+    result: dict[str, Any] = {
         "ok": first_failure is None,
         "completedEvents": completed,
         "firstFailure": first_failure,
         "console": replay_console,
         "errors": replay_errors,
+        "snapshots": replay_snapshots,
     }
+    result["divergence"] = find_first_divergence(
+        {"snapshots": aligned_capture, "errors": trace.get("errors", [])},
+        result,
+    )
+    return result
+
+
+def align_capture_snapshots(capture_snapshots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    allowed_after = {"after:" + t for t in REPLAYABLE_TYPES}
+    allowed = {"capture:start"} | allowed_after
+    return [s for s in capture_snapshots if s.get("reason") in allowed]
 
 
 async def apply_event(page: Any, event: dict[str, Any]) -> None:

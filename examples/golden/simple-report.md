@@ -6,7 +6,7 @@
 - Session: golden-simple
 - Proxy URL: http://127.0.0.1:6173
 - Events: 3
-- Snapshots: 2
+- Snapshots: 4
 - Console entries: 0
 - Errors: 0
 
@@ -28,7 +28,13 @@ No console warnings or errors were captured.
 
 Replay passed after `3` event(s).
 
+## Divergence
+
+Replay state matches captured state across all aligned snapshots.
+
 ## Snapshot Evidence
 
-- `capture:start` state summary: `None` debug snapshot: `{'ok': True, 'value': {'count': 0}}`
-- `after:click` state summary: `None` debug snapshot: `{'ok': True, 'value': {'count': 1}}`
+- `capture:start` state summary: `{'ok': True, 'value': {'type': 'object', 'constructor': 'Object', 'keys': ['count', 'name', 'points']}}` debug snapshot: `{'ok': True, 'value': {'count': 0, 'nameLength': 0, 'pointCount': 0}}`
+- `after:click` state summary: `{'ok': True, 'value': {'type': 'object', 'constructor': 'Object', 'keys': ['count', 'name', 'points']}}` debug snapshot: `{'ok': True, 'value': {'count': 0, 'nameLength': 0, 'pointCount': 0}}`
+- `after:input` state summary: `{'ok': True, 'value': {'type': 'object', 'constructor': 'Object', 'keys': ['count', 'name', 'points']}}` debug snapshot: `{'ok': True, 'value': {'count': 0, 'nameLength': 0, 'pointCount': 0}}`
+- `after:click` state summary: `{'ok': True, 'value': {'type': 'object', 'constructor': 'Object', 'keys': ['count', 'name', 'points']}}` debug snapshot: `{'ok': True, 'value': {'count': 0, 'nameLength': 0, 'pointCount': 0}}`
