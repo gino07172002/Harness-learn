@@ -135,6 +135,37 @@ def test_parse_profile_reads_passive_probes_block():
     assert pp.network is True
 
 
+def test_parse_profile_defaults_file_capture_off():
+    profile = parse_profile({"name": "x"}, Path("/fake/harness.profile.json"))
+
+    fc = profile.file_capture
+    assert fc.mode == "none"
+    assert fc.selectors == ()
+    assert fc.max_file_bytes == 10_000_000
+    assert fc.max_files == 4
+
+
+def test_parse_profile_reads_file_capture_block():
+    profile = parse_profile(
+        {
+            "name": "x",
+            "fileCapture": {
+                "mode": "allowlist",
+                "selectors": ["#fileInput", "#projectLoadInput"],
+                "maxFileBytes": 12_345,
+                "maxFiles": 2,
+            },
+        },
+        Path("/fake/harness.profile.json"),
+    )
+
+    fc = profile.file_capture
+    assert fc.mode == "allowlist"
+    assert fc.selectors == ("#fileInput", "#projectLoadInput")
+    assert fc.max_file_bytes == 12_345
+    assert fc.max_files == 2
+
+
 def test_parse_profile_rejects_missing_name():
     with pytest.raises(ValueError, match="missing required field: name"):
         parse_profile({}, Path("/fake/harness.profile.json"))

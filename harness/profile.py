@@ -8,6 +8,16 @@ from typing import Any
 
 DEFAULT_DEBUG_METHODS: tuple[str, ...] = ("snapshot", "actionLog", "errors", "timing")
 DEFAULT_MAX_ENV_VALUE_BYTES = 1_000_000
+DEFAULT_MAX_FILE_BYTES = 10_000_000
+DEFAULT_MAX_FILES = 4
+
+
+@dataclass(frozen=True)
+class FileCapture:
+    mode: str = "none"
+    selectors: tuple[str, ...] = ()
+    max_file_bytes: int = DEFAULT_MAX_FILE_BYTES
+    max_files: int = DEFAULT_MAX_FILES
 
 
 @dataclass(frozen=True)
@@ -45,6 +55,7 @@ class Profile:
     console_ignore_patterns: tuple[str, ...] = ()
     passive_probes: PassiveProbes = PassiveProbes()
     environment_capture: EnvironmentCapture = EnvironmentCapture()
+    file_capture: FileCapture = FileCapture()
     source_path: Path | None = None
 
 
@@ -68,6 +79,19 @@ def parse_environment_capture(data: Any) -> EnvironmentCapture:
     )
 
 
+def parse_file_capture(data: Any) -> FileCapture:
+    raw = data if isinstance(data, dict) else {}
+    mode = str(raw.get("mode", "none"))
+    if mode not in {"none", "allowlist", "all"}:
+        raise ValueError(f"Unsupported fileCapture mode: {mode}")
+    return FileCapture(
+        mode=mode,
+        selectors=tuple(str(selector) for selector in raw.get("selectors", [])),
+        max_file_bytes=int(raw.get("maxFileBytes", DEFAULT_MAX_FILE_BYTES)),
+        max_files=int(raw.get("maxFiles", DEFAULT_MAX_FILES)),
+    )
+
+
 def parse_profile(data: dict[str, Any], source_path: Path) -> Profile:
     if "name" not in data:
         raise ValueError(f"Profile {source_path} missing required field: name")
@@ -75,6 +99,7 @@ def parse_profile(data: dict[str, Any], source_path: Path) -> Profile:
     root = (source_path.parent / raw_root).resolve()
     raw_probes = data.get("passiveProbes") or {}
     environment_capture = parse_environment_capture(data.get("environmentCapture"))
+    file_capture = parse_file_capture(data.get("fileCapture"))
     passive_probes = PassiveProbes(
         dom_snapshot=bool(raw_probes.get("domSnapshot", False)),
         dom_selectors=tuple(raw_probes.get("domSelectors", [])),
@@ -94,6 +119,7 @@ def parse_profile(data: dict[str, Any], source_path: Path) -> Profile:
         console_ignore_patterns=tuple(data.get("consoleIgnorePatterns", [])),
         passive_probes=passive_probes,
         environment_capture=environment_capture,
+        file_capture=file_capture,
         source_path=source_path,
     )
 
