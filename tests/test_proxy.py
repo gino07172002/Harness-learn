@@ -35,3 +35,19 @@ def test_build_injected_html_inserts_client_before_body_close():
     assert "/__harness__/client.js" in injected
     assert "window.__HARNESS_BOOTSTRAP__" in injected
     assert injected.index("/__harness__/client.js") < injected.index("</body>")
+
+
+def test_build_injected_html_embeds_inspector_config_in_bootstrap():
+    html = "<!doctype html><html><body></body></html>"
+
+    injected = build_injected_html(
+        html,
+        target_name="claude",
+        debug_methods=("snapshot", "mesh"),
+        state_globals=("state", "appState"),
+        console_ignore_patterns=("CONTEXT_LOST_WEBGL",),
+    )
+
+    assert '"debugMethods": ["snapshot", "mesh"]' in injected
+    assert '"stateGlobals": ["state", "appState"]' in injected
+    assert '"consoleIgnorePatterns": ["CONTEXT_LOST_WEBGL"]' in injected

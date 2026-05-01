@@ -6,6 +6,9 @@ from pathlib import Path
 from typing import Any
 
 
+DEFAULT_DEBUG_METHODS: tuple[str, ...] = ("snapshot", "actionLog", "errors", "timing")
+
+
 @dataclass(frozen=True)
 class Profile:
     name: str
@@ -15,6 +18,8 @@ class Profile:
     port: int = 6173
     state_globals: tuple[str, ...] = ("state",)
     volatile_fields: tuple[str, ...] = ()
+    debug_methods: tuple[str, ...] = DEFAULT_DEBUG_METHODS
+    console_ignore_patterns: tuple[str, ...] = ()
     source_path: Path | None = None
 
 
@@ -31,6 +36,8 @@ def parse_profile(data: dict[str, Any], source_path: Path) -> Profile:
         port=int(data.get("port", 6173)),
         state_globals=tuple(data.get("stateGlobals", ["state"])),
         volatile_fields=tuple(data.get("volatileFields", [])),
+        debug_methods=tuple(data.get("debugMethods", DEFAULT_DEBUG_METHODS)),
+        console_ignore_patterns=tuple(data.get("consoleIgnorePatterns", [])),
         source_path=source_path,
     )
 

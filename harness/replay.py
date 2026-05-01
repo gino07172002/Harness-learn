@@ -9,7 +9,7 @@ from harness.divergence import find_first_divergence
 
 
 SNAPSHOT_JS = """
-(() => {
+(({ debugMethods, stateGlobals }) => {
   function summarizeValue(value) {
     if (value === null) return null;
     const t = typeof value;
@@ -23,19 +23,54 @@ SNAPSHOT_JS = """
     try { return { ok: true, value: fn() }; }
     catch (e) { return { ok: false, error: String(e && e.message ? e.message : e) }; }
   }
-  const out = { debugSnapshot: null, debugActionLog: null, debugErrors: null, debugTiming: null, stateSummary: null };
-  if (window.debug && typeof window.debug.snapshot === 'function') out.debugSnapshot = safeCall(() => window.debug.snapshot());
-  if (window.debug && typeof window.debug.actionLog === 'function') out.debugActionLog = safeCall(() => window.debug.actionLog());
-  if (window.debug && typeof window.debug.errors === 'function') out.debugErrors = safeCall(() => window.debug.errors());
-  if (window.debug && typeof window.debug.timing === 'function') out.debugTiming = safeCall(() => window.debug.timing());
-  if ('state' in window) out.stateSummary = safeCall(() => summarizeValue(window.state));
+  const out = {
+    debugSnapshot: null,
+    debugActionLog: null,
+    debugErrors: null,
+    debugTiming: null,
+    debugMethodResults: {},
+    stateSummary: null,
+    stateSummaries: {}
+  };
+  (debugMethods || []).forEach((m) => {
+    if (window.debug && typeof window.debug[m] === 'function') {
+      const r = safeCall(() => window.debug[m]());
+      out.debugMethodResults[m] = r;
+      if (m === 'snapshot') out.debugSnapshot = r;
+      else if (m === 'actionLog') out.debugActionLog = r;
+      else if (m === 'errors') out.debugErrors = r;
+      else if (m === 'timing') out.debugTiming = r;
+    }
+  });
+  (stateGlobals || []).forEach((g) => {
+    if (g in window) {
+      const s = safeCall(() => summarizeValue(window[g]));
+      out.stateSummaries[g] = s;
+      if (g === 'state') out.stateSummary = s;
+    }
+  });
   return out;
-})()
+})
 """
 
 
-async def take_replay_snapshot(page: Any, reason: str) -> dict[str, Any]:
-    payload = await page.evaluate(SNAPSHOT_JS)
+DEFAULT_REPLAY_DEBUG_METHODS = ["snapshot", "actionLog", "errors", "timing"]
+DEFAULT_REPLAY_STATE_GLOBALS = ["state"]
+
+
+async def take_replay_snapshot(
+    page: Any,
+    reason: str,
+    debug_methods: list[str] | None = None,
+    state_globals: list[str] | None = None,
+) -> dict[str, Any]:
+    payload = await page.evaluate(
+        SNAPSHOT_JS,
+        {
+            "debugMethods": debug_methods if debug_methods is not None else DEFAULT_REPLAY_DEBUG_METHODS,
+            "stateGlobals": state_globals if state_globals is not None else DEFAULT_REPLAY_STATE_GLOBALS,
+        },
+    )
     return {"reason": reason, **payload}
 
 
@@ -80,6 +115,9 @@ async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dic
     replay_errors: list[dict[str, Any]] = []
     replay_snapshots: list[dict[str, Any]] = []
 
+    debug_methods = list(session.get("debugMethods") or DEFAULT_REPLAY_DEBUG_METHODS)
+    state_globals = list(session.get("stateGlobals") or DEFAULT_REPLAY_STATE_GLOBALS)
+
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=not headed)
         page = await browser.new_page(viewport=viewport)
@@ -87,7 +125,7 @@ async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dic
         page.on("pageerror", lambda exc: replay_errors.append({"message": str(exc)}))
         await page.goto(proxy_url)
 
-        replay_snapshots.append(await take_replay_snapshot(page, "capture:start"))
+        replay_snapshots.append(await take_replay_snapshot(page, "capture:start", debug_methods, state_globals))
 
         completed = 0
         first_failure = None
@@ -95,7 +133,7 @@ async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dic
             try:
                 await apply_event(page, event)
                 completed += 1
-                replay_snapshots.append(await take_replay_snapshot(page, "after:" + str(event.get("type"))))
+                replay_snapshots.append(await take_replay_snapshot(page, "after:" + str(event.get("type")), debug_methods, state_globals))
             except Exception as exc:
                 first_failure = {
                     "eventIndex": index,

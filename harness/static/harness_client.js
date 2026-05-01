@@ -4,6 +4,17 @@
   }
 
   const bootstrap = window.__HARNESS_BOOTSTRAP__ || { version: 1, targetName: "target" };
+  const DEFAULT_DEBUG_METHODS = ["snapshot", "actionLog", "errors", "timing"];
+  const debugMethods = Array.isArray(bootstrap.debugMethods) && bootstrap.debugMethods.length
+    ? bootstrap.debugMethods.slice()
+    : DEFAULT_DEBUG_METHODS.slice();
+  const stateGlobals = Array.isArray(bootstrap.stateGlobals) && bootstrap.stateGlobals.length
+    ? bootstrap.stateGlobals.slice()
+    : ["state"];
+  const consoleIgnorePatterns = (Array.isArray(bootstrap.consoleIgnorePatterns) ? bootstrap.consoleIgnorePatterns : [])
+    .map((p) => { try { return new RegExp(p); } catch (_) { return null; } })
+    .filter((r) => r !== null);
+
   const trace = {
     version: 1,
     session: {
@@ -16,7 +27,10 @@
       viewport: { width: window.innerWidth, height: window.innerHeight },
       controller: "user",
       mode: "capture",
-      userAgent: navigator.userAgent
+      userAgent: navigator.userAgent,
+      debugMethods: debugMethods.slice(),
+      stateGlobals: stateGlobals.slice(),
+      debugHelp: null
     },
     events: [],
     snapshots: [],
@@ -112,30 +126,42 @@
       debugActionLog: null,
       debugErrors: null,
       debugTiming: null,
-      stateSummary: null
+      debugMethodResults: {},
+      stateSummary: null,
+      stateSummaries: {}
     };
 
-    if (window.debug && typeof window.debug.snapshot === "function") {
-      snapshot.debugSnapshot = safeCall(() => window.debug.snapshot());
-    }
-    if (window.debug && typeof window.debug.actionLog === "function") {
-      snapshot.debugActionLog = safeCall(() => window.debug.actionLog());
-    }
-    if (window.debug && typeof window.debug.errors === "function") {
-      snapshot.debugErrors = safeCall(() => window.debug.errors());
-    }
-    if (window.debug && typeof window.debug.timing === "function") {
-      snapshot.debugTiming = safeCall(() => window.debug.timing());
-    }
-    if ("state" in window) {
-      snapshot.stateSummary = safeCall(() => summarizeValue(window.state));
-    }
+    debugMethods.forEach((methodName) => {
+      if (window.debug && typeof window.debug[methodName] === "function") {
+        const result = safeCall(() => window.debug[methodName]());
+        snapshot.debugMethodResults[methodName] = result;
+        if (methodName === "snapshot") snapshot.debugSnapshot = result;
+        else if (methodName === "actionLog") snapshot.debugActionLog = result;
+        else if (methodName === "errors") snapshot.debugErrors = result;
+        else if (methodName === "timing") snapshot.debugTiming = result;
+      }
+    });
+
+    stateGlobals.forEach((globalName) => {
+      if (globalName in window) {
+        const summary = safeCall(() => summarizeValue(window[globalName]));
+        snapshot.stateSummaries[globalName] = summary;
+        if (globalName === "state") snapshot.stateSummary = summary;
+      }
+    });
 
     trace.snapshots.push(snapshot);
   }
 
+  function captureDebugHelp() {
+    if (window.debug && typeof window.debug.help === "function") {
+      trace.session.debugHelp = safeCall(() => window.debug.help());
+    }
+  }
+
   function startCapture() {
     captureActive = true;
+    captureDebugHelp();
     captureSnapshot("capture:start");
     updatePanel();
   }
@@ -157,15 +183,31 @@
     panelStatus.textContent = result.ok ? "saved " + result.path : "save failed";
   }
 
+  function consoleArgsIgnored(args) {
+    if (consoleIgnorePatterns.length === 0) return false;
+    for (let i = 0; i < args.length; i++) {
+      const value = args[i];
+      const text = typeof value === "string" ? value : (value && value.message ? String(value.message) : "");
+      if (!text) continue;
+      for (let j = 0; j < consoleIgnorePatterns.length; j++) {
+        if (consoleIgnorePatterns[j].test(text)) return true;
+      }
+    }
+    return false;
+  }
+
   const originalConsole = {};
   ["log", "info", "warn", "error", "debug"].forEach((level) => {
     originalConsole[level] = console[level].bind(console);
     console[level] = function () {
-      trace.console.push({
-        time: now(),
-        level,
-        args: Array.from(arguments).map((value) => summarizeValue(value))
-      });
+      const args = Array.from(arguments);
+      if (!consoleArgsIgnored(args)) {
+        trace.console.push({
+          time: now(),
+          level,
+          args: args.map((value) => summarizeValue(value))
+        });
+      }
       originalConsole[level].apply(console, arguments);
     };
   });

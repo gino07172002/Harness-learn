@@ -315,7 +315,21 @@ python harness_regress.py --golden examples/golden/simple-trace.json
 任何 CLI flag（`--target` / `--port` / `--host` / `--target-name`）都會 override profile 的對應值。
 
 接新 target 的最小流程：在 target 目錄放 profile json，寫 name + root + port，三個 CLI 直接吃。
-`stateGlobals` 與 `volatileFields` 已存在 schema，但 client.js 與 divergence 尚未消費，留給未來使用。
+`volatileFields` 已存在 schema，但 divergence 尚未消費，留給未來使用。
+
+### F. Profile-Driven Debug Inspectors（已完成）
+
+Profile 加兩個欄位：
+
+- `debugMethods`: 一個字串陣列，client.js 每次 snapshot 都會依列表呼叫 `window.debug[method]()`，結果寫進 `snapshot.debugMethodResults[method]`。預設值 `["snapshot","actionLog","errors","timing"]` 與舊行為一致。
+- `consoleIgnorePatterns`: 一個字串陣列，每個會被 client.js 編譯成 RegExp，命中的 console 訊息**不會**寫進 trace（仍在原 console 顯示）。
+
+Bootstrap pipeline：proxy 把 profile 的 `debugMethods` / `stateGlobals` / `consoleIgnorePatterns` 注進 `__HARNESS_BOOTSTRAP__`，client.js 讀取並寫進 `trace.session` 對應欄位。Replay 端從 `trace.session` 取回，replay 的 snapshots 會用同一份 method 列表呼叫，確保 capture/replay 對齊。
+
+第一次 capture 開始時，client.js 會自動呼叫 `window.debug.help()`（如果存在），結果存進 `trace.session.debugHelp`。下一個 agent 看 trace 就知道這個 target 提供哪些 inspector。
+
+參考實作：`examples/targets/claude-ref/harness.profile.json`（實際接到 d:/claude，10 個 method、7 條 console ignore patterns）。
+範例 finding 與掃描結果：`docs/runbooks/scanning-claude.md`。
 
 ## 建議新 Agent 的第一個回覆
 

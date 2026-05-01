@@ -45,6 +45,8 @@ def test_parse_profile_overrides_all_fields():
             "port": 7000,
             "stateGlobals": ["state", "appState"],
             "volatileFields": ["debugTiming.value.frameMs"],
+            "debugMethods": ["snapshot", "mesh", "slots"],
+            "consoleIgnorePatterns": ["CONTEXT_LOST_WEBGL", "GroupMarkerNotSet"],
         },
         source,
     )
@@ -54,6 +56,14 @@ def test_parse_profile_overrides_all_fields():
     assert profile.startup_path == "/index.html"
     assert profile.state_globals == ("state", "appState")
     assert profile.volatile_fields == ("debugTiming.value.frameMs",)
+    assert profile.debug_methods == ("snapshot", "mesh", "slots")
+    assert profile.console_ignore_patterns == ("CONTEXT_LOST_WEBGL", "GroupMarkerNotSet")
+
+
+def test_parse_profile_defaults_inspector_fields():
+    profile = parse_profile({"name": "x"}, Path("/fake/harness.profile.json"))
+    assert profile.debug_methods == ("snapshot", "actionLog", "errors", "timing")
+    assert profile.console_ignore_patterns == ()
 
 
 def test_parse_profile_rejects_missing_name():

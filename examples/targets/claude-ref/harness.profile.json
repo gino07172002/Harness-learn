@@ -1,0 +1,30 @@
+{
+  "name": "claude",
+  "root": "../../../../claude",
+  "startupPath": "/",
+  "host": "127.0.0.1",
+  "port": 6180,
+  "stateGlobals": ["state", "appState", "spineState"],
+  "volatileFields": ["debugTiming.value.frameMs"],
+  "debugMethods": [
+    "snapshot",
+    "mesh",
+    "slots",
+    "bones",
+    "constraints",
+    "animations",
+    "actionLog",
+    "errors",
+    "warnings",
+    "timing"
+  ],
+  "consoleIgnorePatterns": [
+    "Automatic fallback to software WebGL",
+    "CONTEXT_LOST_WEBGL",
+    "GroupMarkerNotSet",
+    "context lost",
+    "context restored",
+    "GPU stall",
+    "resources rebuilt"
+  ]
+}

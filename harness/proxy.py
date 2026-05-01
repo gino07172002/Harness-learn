@@ -26,11 +26,21 @@ def resolve_target_path(target_root: Path, request_path: str) -> Path:
     return candidate
 
 
-def build_injected_html(html_text: str, target_name: str, harness_run_id: str | None = None) -> str:
+def build_injected_html(
+    html_text: str,
+    target_name: str,
+    harness_run_id: str | None = None,
+    debug_methods: tuple[str, ...] | list[str] | None = None,
+    state_globals: tuple[str, ...] | list[str] | None = None,
+    console_ignore_patterns: tuple[str, ...] | list[str] | None = None,
+) -> str:
     bootstrap = {
         "version": 1,
         "targetName": target_name,
         "harnessRunId": harness_run_id,
+        "debugMethods": list(debug_methods) if debug_methods is not None else None,
+        "stateGlobals": list(state_globals) if state_globals is not None else None,
+        "consoleIgnorePatterns": list(console_ignore_patterns) if console_ignore_patterns is not None else None,
     }
     script = (
         "<script>"
@@ -52,6 +62,9 @@ class HarnessProxyHandler(BaseHTTPRequestHandler):
     trace_store: TraceStore
     run_logger: RunLogger
     run_id: str
+    debug_methods: tuple[str, ...] | None = None
+    state_globals: tuple[str, ...] | None = None
+    console_ignore_patterns: tuple[str, ...] | None = None
 
     def do_GET(self) -> None:
         if urlparse(self.path).path == CLIENT_ROUTE:
@@ -109,7 +122,14 @@ class HarnessProxyHandler(BaseHTTPRequestHandler):
         data = path.read_bytes()
         if inject:
             text = data.decode("utf-8")
-            data = build_injected_html(text, self.target_name, self.run_id).encode("utf-8")
+            data = build_injected_html(
+                text,
+                self.target_name,
+                self.run_id,
+                debug_methods=self.debug_methods,
+                state_globals=self.state_globals,
+                console_ignore_patterns=self.console_ignore_patterns,
+            ).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
@@ -117,7 +137,15 @@ class HarnessProxyHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
-def run_proxy_server(target_root: Path, target_name: str, host: str, port: int) -> None:
+def run_proxy_server(
+    target_root: Path,
+    target_name: str,
+    host: str,
+    port: int,
+    debug_methods: tuple[str, ...] | None = None,
+    state_globals: tuple[str, ...] | None = None,
+    console_ignore_patterns: tuple[str, ...] | None = None,
+) -> None:
     client_path = Path(__file__).parent / "static" / "harness_client.js"
     trace_store = TraceStore(Path("traces"))
     run_logger = RunLogger(Path("runs"))
@@ -132,6 +160,9 @@ def run_proxy_server(target_root: Path, target_name: str, host: str, port: int) 
     ConfiguredHarnessProxyHandler.trace_store = trace_store
     ConfiguredHarnessProxyHandler.run_logger = run_logger
     ConfiguredHarnessProxyHandler.run_id = run_logger.run_id
+    ConfiguredHarnessProxyHandler.debug_methods = debug_methods
+    ConfiguredHarnessProxyHandler.state_globals = state_globals
+    ConfiguredHarnessProxyHandler.console_ignore_patterns = console_ignore_patterns
     server = ThreadingHTTPServer((host, port), ConfiguredHarnessProxyHandler)
     print(f"Serving {target_root} as {target_name} at http://{host}:{port}")
     server.serve_forever()

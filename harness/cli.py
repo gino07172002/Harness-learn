@@ -23,7 +23,15 @@ def resolve_target_settings(args: argparse.Namespace, *, require_target: bool = 
 
     if require_target and target is None:
         raise SystemExit("error: --target is required (or pass --profile)")
-    return {"target": target, "target_name": target_name, "host": host, "port": port}
+    return {
+        "target": target,
+        "target_name": target_name,
+        "host": host,
+        "port": port,
+        "debug_methods": profile.debug_methods if profile else None,
+        "state_globals": profile.state_globals if profile else None,
+        "console_ignore_patterns": profile.console_ignore_patterns if profile else None,
+    }
 
 
 def build_server_parser() -> argparse.ArgumentParser:
@@ -88,7 +96,15 @@ def server_main() -> int:
     parser = build_server_parser()
     args = parser.parse_args()
     settings = resolve_target_settings(args)
-    run_proxy_server(settings["target"], settings["target_name"], settings["host"], settings["port"])
+    run_proxy_server(
+        settings["target"],
+        settings["target_name"],
+        settings["host"],
+        settings["port"],
+        debug_methods=settings["debug_methods"],
+        state_globals=settings["state_globals"],
+        console_ignore_patterns=settings["console_ignore_patterns"],
+    )
     return 0
 
 
