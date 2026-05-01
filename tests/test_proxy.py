@@ -68,3 +68,22 @@ def test_build_injected_html_embeds_environment_capture_in_bootstrap():
 
     assert '"environmentCapture": {"localStorage": {"mode": "allowlist", "keys": ["autosave"]}' in injected
     assert '"maxValueBytes": 1234' in injected
+
+
+def test_build_injected_html_embeds_file_capture_in_bootstrap():
+    html = "<!doctype html><html><body></body></html>"
+
+    injected = build_injected_html(
+        html,
+        target_name="claude",
+        file_capture={
+            "mode": "allowlist",
+            "selectors": ["#fileInput"],
+            "maxFileBytes": 1234,
+            "maxFiles": 1,
+        },
+    )
+
+    assert '"fileCapture": {"mode": "allowlist", "selectors": ["#fileInput"]' in injected
+    assert '"maxFileBytes": 1234' in injected
+    assert '"maxFiles": 1' in injected

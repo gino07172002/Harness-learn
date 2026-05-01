@@ -36,6 +36,7 @@ def build_injected_html(
     volatile_fields: tuple[str, ...] | list[str] | None = None,
     passive_probes: dict | None = None,
     environment_capture: dict | None = None,
+    file_capture: dict | None = None,
 ) -> str:
     bootstrap = {
         "version": 1,
@@ -47,6 +48,7 @@ def build_injected_html(
         "volatileFields": list(volatile_fields) if volatile_fields is not None else None,
         "passiveProbes": passive_probes,
         "environmentCapture": environment_capture,
+        "fileCapture": file_capture,
     }
     script = (
         "<script>"
@@ -74,6 +76,7 @@ class HarnessProxyHandler(BaseHTTPRequestHandler):
     volatile_fields: tuple[str, ...] | None = None
     passive_probes: dict | None = None
     environment_capture: dict | None = None
+    file_capture: dict | None = None
 
     def do_GET(self) -> None:
         if urlparse(self.path).path == CLIENT_ROUTE:
@@ -141,6 +144,7 @@ class HarnessProxyHandler(BaseHTTPRequestHandler):
                 volatile_fields=self.volatile_fields,
                 passive_probes=self.passive_probes,
                 environment_capture=self.environment_capture,
+                file_capture=self.file_capture,
             ).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", content_type)
@@ -160,6 +164,7 @@ def run_proxy_server(
     volatile_fields: tuple[str, ...] | None = None,
     passive_probes: dict | None = None,
     environment_capture: dict | None = None,
+    file_capture: dict | None = None,
 ) -> None:
     client_path = Path(__file__).parent / "static" / "harness_client.js"
     trace_store = TraceStore(Path("traces"))
@@ -181,6 +186,7 @@ def run_proxy_server(
     ConfiguredHarnessProxyHandler.volatile_fields = volatile_fields
     ConfiguredHarnessProxyHandler.passive_probes = passive_probes
     ConfiguredHarnessProxyHandler.environment_capture = environment_capture
+    ConfiguredHarnessProxyHandler.file_capture = file_capture
     server = ThreadingHTTPServer((host, port), ConfiguredHarnessProxyHandler)
     print(f"Serving {target_root} as {target_name} at http://{host}:{port}")
     server.serve_forever()
