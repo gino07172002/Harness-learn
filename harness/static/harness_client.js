@@ -53,6 +53,21 @@
   let captureActive = false;
   let lastPointerMoveAt = 0;
 
+  const HARNESS_PANEL_ID = "__zero_mod_harness_panel";
+  const HARNESS_PANEL_SELECTOR = "#" + HARNESS_PANEL_ID;
+
+  function isHarnessUi(target) {
+    // Events on the harness's own control panel must never enter the trace;
+    // otherwise Stop / Save / Copy clicks pollute the target's recording and
+    // break the zero-mod observer boundary.
+    if (!target || typeof target !== "object") return false;
+    if (target.id === HARNESS_PANEL_ID) return true;
+    if (typeof target.closest === "function") {
+      try { return target.closest(HARNESS_PANEL_SELECTOR) !== null; } catch (_) { return false; }
+    }
+    return false;
+  }
+
   function now() {
     return Math.round(performance.now() * 100) / 100;
   }
@@ -81,6 +96,9 @@
 
   function recordEvent(event, extra) {
     if (!captureActive) {
+      return;
+    }
+    if (isHarnessUi(event.target)) {
       return;
     }
     trace.events.push(Object.assign({
@@ -302,6 +320,9 @@
 
   async function recordFormEvent(event, extra, options) {
     const target = event.target;
+    if (isHarnessUi(target)) {
+      return;
+    }
     const form = Object.assign({}, extra && extra.form ? extra.form : {});
     const wantsFiles = !options || options.captureFiles !== false;
     if (wantsFiles && filePolicyAllows(target)) {
