@@ -64,3 +64,61 @@ def test_volatility_suppression_passes_with_normal_field():
 
     assert result.ok is True
     assert "1 volatile field" in result.message
+
+
+def test_check_target_path_failure_includes_actionable_hint(tmp_path: Path):
+    missing = tmp_path / "does-not-exist"
+
+    result = check_target_path(missing)
+
+    assert result.ok is False
+    assert result.hint is not None
+    assert "check --target" in result.hint
+
+
+def test_check_writable_directory_failure_includes_hint(tmp_path: Path):
+    blocker = tmp_path / "blocker"
+    blocker.write_text("not a directory", encoding="utf-8")
+
+    result = check_writable_directory("blocker.writable", blocker)
+
+    assert result.ok is False
+    assert result.hint is not None
+    assert "permissions" in result.hint or "writable" in result.hint
+
+
+def test_render_doctor_text_shows_hint_on_failure():
+    from harness.doctor import render_doctor_text
+
+    text = render_doctor_text([
+        CheckResult(
+            "chromium.launch",
+            False,
+            "Chromium could not launch",
+            detail="Executable doesn't exist",
+            duration_ms=312,
+            hint="run `python -m playwright install chromium`",
+        ),
+    ])
+
+    assert "fail - Chromium could not launch" in text
+    assert "hint: run `python -m playwright install chromium`" in text
+    assert "duration: 312 ms" in text
+
+
+def test_render_doctor_text_shows_detail_on_success():
+    from harness.doctor import render_doctor_text
+
+    text = render_doctor_text([
+        CheckResult(
+            "playwright.import",
+            True,
+            "playwright importable",
+            detail="playwright 1.51.0",
+            duration_ms=84,
+        ),
+    ])
+
+    assert "playwright.import: ok" in text
+    assert "playwright 1.51.0" in text
+    assert "84 ms" in text

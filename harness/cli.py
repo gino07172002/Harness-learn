@@ -135,11 +135,16 @@ def replay_main() -> int:
     parser = build_replay_parser()
     args = parser.parse_args()
     trace = json.loads(args.trace.read_text(encoding="utf-8"))
-    result = replay_trace(trace, headed=args.headed)
+    logger = RunLogger(args.run_log.parent, run_id=args.run_log.stem) if args.run_log else None
+
+    if logger is not None:
+        with logger.timed("replay.completed", trace=str(args.trace)) as completion:
+            result = replay_trace(trace, headed=args.headed)
+            completion.update(build_replay_completed_event(result))
+    else:
+        result = replay_trace(trace, headed=args.headed)
+
     args.trace.write_text(json.dumps(attach_replay_result(trace, result), indent=2), encoding="utf-8")
-    if args.run_log:
-        logger = RunLogger(args.run_log.parent, run_id=args.run_log.stem)
-        logger.record("replay.completed", **build_replay_completed_event(result))
     print(json.dumps(result, indent=2))
     return 0 if result.get("ok") else 1
 
@@ -152,16 +157,21 @@ def report_main() -> int:
     parser = build_report_parser()
     args = parser.parse_args()
     trace = json.loads(args.trace.read_text(encoding="utf-8"))
-    markdown = build_report_markdown(trace)
+    logger = RunLogger(args.run_log.parent, run_id=args.run_log.stem) if args.run_log else None
+    report_path = str(args.out) if args.out else "<stdout>"
+
+    if logger is not None:
+        with logger.timed("report.generated", trace=str(args.trace)) as completion:
+            markdown = build_report_markdown(trace)
+            completion.update(build_report_generated_event(report_path))
+    else:
+        markdown = build_report_markdown(trace)
+
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(markdown, encoding="utf-8")
     else:
         print(markdown)
-    if args.run_log:
-        logger = RunLogger(args.run_log.parent, run_id=args.run_log.stem)
-        report_path = str(args.out) if args.out else "<stdout>"
-        logger.record("report.generated", **build_report_generated_event(report_path))
     return 0
 
 

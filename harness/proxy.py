@@ -116,7 +116,7 @@ class HarnessProxyHandler(BaseHTTPRequestHandler):
             snapshotCount=len(trace.get("snapshots", [])),
         )
         path = self.trace_store.write_trace(trace)
-        self.run_logger.record("trace.saved", path=str(path))
+        self.run_logger.record("trace.saved", path=str(path), bytes=length)
         response = json.dumps({"ok": True, "path": str(path)}).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -177,4 +177,12 @@ def run_proxy_server(
     ConfiguredHarnessProxyHandler.passive_probes = passive_probes
     server = ThreadingHTTPServer((host, port), ConfiguredHarnessProxyHandler)
     print(f"Serving {target_root} as {target_name} at http://{host}:{port}")
-    server.serve_forever()
+    import time as _time
+    started_at = _time.monotonic()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        duration_ms = int((_time.monotonic() - started_at) * 1000)
+        run_logger.record("proxy.shutdown", durationMs=duration_ms)
