@@ -1,4 +1,6 @@
-from harness.replay import attach_replay_result, replayable_events
+import asyncio
+
+from harness.replay import attach_replay_result, extract_fixture_storage, replayable_events, restore_environment_fixture
 
 
 def test_replayable_events_keeps_user_input_events():
@@ -50,3 +52,60 @@ def test_replay_result_event_payload_is_stable():
     payload = build_replay_completed_event({"ok": True, "completedEvents": 3})
 
     assert payload == {"ok": True, "completedEvents": 3}
+
+
+def test_extract_fixture_storage_returns_local_and_session_items():
+    trace = {
+        "environmentFixture": {
+            "storage": {
+                "localStorage": {"items": {"autosave": "project-json"}},
+                "sessionStorage": {"items": {"tab": "rig"}},
+            }
+        }
+    }
+
+    storage = extract_fixture_storage(trace)
+
+    assert storage == {
+        "localStorage": {"autosave": "project-json"},
+        "sessionStorage": {"tab": "rig"},
+    }
+
+
+def test_extract_fixture_storage_defaults_missing_fixture_to_empty_items():
+    assert extract_fixture_storage({}) == {"localStorage": {}, "sessionStorage": {}}
+
+
+class FakeContext:
+    def __init__(self):
+        self.calls = []
+
+    async def add_init_script(self, script=None, *, path=None):
+        self.calls.append({"script": script, "path": path})
+
+
+def test_restore_environment_fixture_writes_storage_values():
+    context = FakeContext()
+    trace = {
+        "environmentFixture": {
+            "storage": {
+                "localStorage": {"items": {"autosave": "project-json"}},
+                "sessionStorage": {"items": {"tab": "rig"}},
+            }
+        }
+    }
+
+    asyncio.run(restore_environment_fixture(context, trace))
+
+    assert len(context.calls) == 1
+    assert context.calls[0]["path"] is None
+    assert "project-json" in context.calls[0]["script"]
+    assert "window.localStorage.setItem(key, value)" in context.calls[0]["script"]
+
+
+def test_restore_environment_fixture_skips_empty_fixture():
+    context = FakeContext()
+
+    asyncio.run(restore_environment_fixture(context, {}))
+
+    assert context.calls == []

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 from playwright.async_api import async_playwright
@@ -57,6 +58,19 @@ SNAPSHOT_JS = """
 DEFAULT_REPLAY_DEBUG_METHODS = ["snapshot", "actionLog", "errors", "timing"]
 DEFAULT_REPLAY_STATE_GLOBALS = ["state"]
 
+RESTORE_ENVIRONMENT_JS = """
+((storage) => {
+  const localItems = storage.localStorage || {};
+  const sessionItems = storage.sessionStorage || {};
+  for (const [key, value] of Object.entries(localItems || {})) {
+    window.localStorage.setItem(key, value);
+  }
+  for (const [key, value] of Object.entries(sessionItems || {})) {
+    window.sessionStorage.setItem(key, value);
+  }
+})(__HARNESS_ENVIRONMENT_FIXTURE__)
+"""
+
 
 async def take_replay_snapshot(
     page: Any,
@@ -104,6 +118,34 @@ def build_replay_completed_event(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def extract_fixture_storage(trace: dict[str, Any]) -> dict[str, dict[str, str]]:
+    fixture = trace.get("environmentFixture") if isinstance(trace, dict) else None
+    storage = fixture.get("storage", {}) if isinstance(fixture, dict) else {}
+
+    def items_for(name: str) -> dict[str, str]:
+        layer = storage.get(name, {}) if isinstance(storage, dict) else {}
+        items = layer.get("items", {}) if isinstance(layer, dict) else {}
+        if not isinstance(items, dict):
+            return {}
+        return {str(key): str(value) for key, value in items.items()}
+
+    return {
+        "localStorage": items_for("localStorage"),
+        "sessionStorage": items_for("sessionStorage"),
+    }
+
+
+async def restore_environment_fixture(context: Any, trace: dict[str, Any]) -> None:
+    storage = extract_fixture_storage(trace)
+    if not storage["localStorage"] and not storage["sessionStorage"]:
+        return
+    script = RESTORE_ENVIRONMENT_JS.replace(
+        "__HARNESS_ENVIRONMENT_FIXTURE__",
+        json.dumps(storage),
+    )
+    await context.add_init_script(script)
+
+
 async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dict[str, Any]:
     session = trace.get("session", {})
     proxy_url = session.get("proxyUrl")
@@ -120,10 +162,12 @@ async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dic
 
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=not headed)
-        page = await browser.new_page(viewport=viewport)
+        context = await browser.new_context(viewport=viewport)
+        await restore_environment_fixture(context, trace)
+        page = await context.new_page()
         page.on("console", lambda msg: replay_console.append({"type": msg.type, "text": msg.text}))
         page.on("pageerror", lambda exc: replay_errors.append({"message": str(exc)}))
-        await page.goto(proxy_url)
+        await page.goto(session.get("url") or proxy_url)
 
         replay_snapshots.append(await take_replay_snapshot(page, "capture:start", debug_methods, state_globals))
 

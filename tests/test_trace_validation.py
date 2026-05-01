@@ -43,3 +43,16 @@ def test_validate_trace_reports_invalid_replay_type():
     errors = validate_trace(trace)
 
     assert "trace.replay: expected object or null, got list" in errors
+
+
+def test_validate_trace_accepts_optional_environment_fixture_object():
+    trace = valid_trace()
+    trace["environmentFixture"] = {
+        "version": 1,
+        "storage": {
+            "localStorage": {"items": {"autosave": "{}"}},
+            "sessionStorage": {"items": {}},
+        },
+    }
+
+    assert validate_trace(trace) == []

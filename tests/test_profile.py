@@ -76,6 +76,43 @@ def test_parse_profile_defaults_passive_probes_off():
     assert pp.network is False
 
 
+def test_parse_profile_defaults_environment_capture_off():
+    profile = parse_profile({"name": "x"}, Path("/fake/harness.profile.json"))
+
+    env = profile.environment_capture
+    assert env.local_storage.mode == "none"
+    assert env.local_storage.keys == ()
+    assert env.session_storage.mode == "none"
+    assert env.session_storage.keys == ()
+    assert env.max_value_bytes == 1_000_000
+
+
+def test_parse_profile_reads_environment_capture_block():
+    profile = parse_profile(
+        {
+            "name": "x",
+            "environmentCapture": {
+                "localStorage": {
+                    "mode": "allowlist",
+                    "keys": ["autosave", "layout"],
+                },
+                "sessionStorage": {
+                    "mode": "all",
+                },
+                "maxValueBytes": 5_000_000,
+            },
+        },
+        Path("/fake/harness.profile.json"),
+    )
+
+    env = profile.environment_capture
+    assert env.local_storage.mode == "allowlist"
+    assert env.local_storage.keys == ("autosave", "layout")
+    assert env.session_storage.mode == "all"
+    assert env.session_storage.keys == ()
+    assert env.max_value_bytes == 5_000_000
+
+
 def test_parse_profile_reads_passive_probes_block():
     profile = parse_profile(
         {

@@ -50,5 +50,18 @@
     "storage": true,
     "windowGlobalsScan": true,
     "network": true
+  },
+  "environmentCapture": {
+    "localStorage": {
+      "mode": "allowlist",
+      "keys": [
+        "mesh_deformer_autosave_v1",
+        "uiLayout:v3"
+      ]
+    },
+    "sessionStorage": {
+      "mode": "none"
+    },
+    "maxValueBytes": 5000000
   }
 }

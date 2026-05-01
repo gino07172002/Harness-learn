@@ -16,6 +16,7 @@
     .filter((r) => r !== null);
   const volatileFields = Array.isArray(bootstrap.volatileFields) ? bootstrap.volatileFields.slice() : [];
   const passiveProbes = bootstrap.passiveProbes || {};
+  const environmentCapture = bootstrap.environmentCapture || {};
   const networkLog = [];
   const BUILTIN_WINDOW_KEYS = new Set();
 
@@ -179,6 +180,61 @@
     };
   }
 
+  function storagePolicy(name) {
+    const raw = environmentCapture && environmentCapture[name] ? environmentCapture[name] : {};
+    const mode = raw.mode || "none";
+    return {
+      mode: mode === "allowlist" || mode === "all" ? mode : "none",
+      keys: Array.isArray(raw.keys) ? raw.keys.map((k) => String(k)) : []
+    };
+  }
+
+  function captureStorageLayer(storage, policy, maxValueBytes) {
+    const items = {};
+    const skipped = [];
+    if (policy.mode === "none") {
+      return { mode: "none", items, skipped };
+    }
+
+    const keys = policy.mode === "allowlist"
+      ? policy.keys.slice()
+      : Array.from({ length: storage.length }, (_, i) => storage.key(i)).filter((k) => k !== null);
+
+    keys.forEach((key) => {
+      const value = storage.getItem(key);
+      if (value === null) {
+        skipped.push({ key, reason: "missing" });
+        return;
+      }
+      if (value.length > maxValueBytes) {
+        skipped.push({ key, reason: "value-too-large", valueLength: value.length });
+        return;
+      }
+      items[key] = value;
+    });
+
+    return { mode: policy.mode, items, skipped };
+  }
+
+  function captureEnvironmentFixture() {
+    const localPolicy = storagePolicy("localStorage");
+    const sessionPolicy = storagePolicy("sessionStorage");
+    if (localPolicy.mode === "none" && sessionPolicy.mode === "none") {
+      return null;
+    }
+    const maxValueBytes = Number.isFinite(Number(environmentCapture.maxValueBytes))
+      ? Number(environmentCapture.maxValueBytes)
+      : 1000000;
+    return {
+      version: 1,
+      url: window.location.href,
+      storage: {
+        localStorage: captureStorageLayer(window.localStorage, localPolicy, maxValueBytes),
+        sessionStorage: captureStorageLayer(window.sessionStorage, sessionPolicy, maxValueBytes)
+      }
+    };
+  }
+
   function probeWindowGlobals() {
     const own = Object.keys(window).filter((k) => !BUILTIN_WINDOW_KEYS.has(k) && !k.startsWith("__"));
     return own.slice(0, 80).map((k) => {
@@ -259,6 +315,10 @@
   function startCapture() {
     captureActive = true;
     captureDebugHelp();
+    const fixture = captureEnvironmentFixture();
+    if (fixture) {
+      trace.environmentFixture = fixture;
+    }
     captureSnapshot("capture:start");
     updatePanel();
   }
