@@ -424,7 +424,7 @@
       lastSavedPath = result.path;
       panelStatus.textContent = "saved " + result.path;
       copyPathButton.style.display = "";
-      copyPathButton.textContent = "Copy path";
+      copyPathButton.textContent = "📋";
     } else {
       lastSavedPath = null;
       panelStatus.textContent = "save failed";
@@ -452,8 +452,8 @@
       try { copied = document.execCommand("copy"); } catch (_) { copied = false; }
       document.body.removeChild(textarea);
     }
-    copyPathButton.textContent = copied ? "Copied!" : "Copy failed";
-    setTimeout(() => { copyPathButton.textContent = "Copy path"; }, 1500);
+    copyPathButton.textContent = copied ? "✓" : "✗";
+    setTimeout(() => { copyPathButton.textContent = "📋"; }, 1500);
   }
 
   function consoleArgsIgnored(args) {
@@ -659,6 +659,12 @@
       opacity: 0.35;
       cursor: not-allowed;
     }
+    #__zero_mod_harness_panel button.__h_icon {
+      padding: 2px 6px;
+      font-size: 11px;
+      line-height: 1;
+      border-radius: 3px;
+    }
   `;
 
   const panel = document.createElement("div");
@@ -680,14 +686,15 @@
   startButton.textContent = "Start";
   stopButton.textContent = "Stop";
   saveButton.textContent = "Save";
-  copyPathButton.textContent = "Copy path";
+  copyPathButton.textContent = "📋";
+  copyPathButton.className = "__h_icon";
   copyPathButton.title = "Copy the saved trace path to clipboard";
   copyPathButton.style.display = "none";
   startButton.addEventListener("click", startCapture);
   stopButton.addEventListener("click", stopCapture);
   saveButton.addEventListener("click", saveTrace);
   copyPathButton.addEventListener("click", copySavedPath);
-  panel.append(dot, panelStatus, panelCounts, startButton, stopButton, saveButton, copyPathButton);
+  panel.append(dot, panelStatus, copyPathButton, panelCounts, startButton, stopButton, saveButton);
 
   function updatePanel() {
     if (captureActive) {
