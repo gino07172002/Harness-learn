@@ -405,6 +405,8 @@
     updatePanel();
   }
 
+  let lastSavedPath = null;
+
   async function saveTrace() {
     captureSnapshot("capture:save");
     const response = await fetch("/__harness__/trace", {
@@ -413,7 +415,40 @@
       body: JSON.stringify(trace)
     });
     const result = await response.json();
-    panelStatus.textContent = result.ok ? "saved " + result.path : "save failed";
+    if (result.ok) {
+      lastSavedPath = result.path;
+      panelStatus.textContent = "saved " + result.path;
+      copyPathButton.style.display = "";
+      copyPathButton.textContent = "Copy path";
+    } else {
+      lastSavedPath = null;
+      panelStatus.textContent = "save failed";
+      copyPathButton.style.display = "none";
+    }
+  }
+
+  async function copySavedPath() {
+    if (!lastSavedPath) return;
+    let copied = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(lastSavedPath);
+        copied = true;
+      }
+    } catch (_) { /* fall through to legacy path */ }
+    if (!copied) {
+      const textarea = document.createElement("textarea");
+      textarea.value = lastSavedPath;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try { copied = document.execCommand("copy"); } catch (_) { copied = false; }
+      document.body.removeChild(textarea);
+    }
+    copyPathButton.textContent = copied ? "Copied!" : "Copy failed";
+    setTimeout(() => { copyPathButton.textContent = "Copy path"; }, 1500);
   }
 
   function consoleArgsIgnored(args) {
@@ -636,13 +671,18 @@
   const startButton = document.createElement("button");
   const stopButton = document.createElement("button");
   const saveButton = document.createElement("button");
+  const copyPathButton = document.createElement("button");
   startButton.textContent = "Start";
   stopButton.textContent = "Stop";
   saveButton.textContent = "Save";
+  copyPathButton.textContent = "Copy path";
+  copyPathButton.title = "Copy the saved trace path to clipboard";
+  copyPathButton.style.display = "none";
   startButton.addEventListener("click", startCapture);
   stopButton.addEventListener("click", stopCapture);
   saveButton.addEventListener("click", saveTrace);
-  panel.append(dot, panelStatus, panelCounts, startButton, stopButton, saveButton);
+  copyPathButton.addEventListener("click", copySavedPath);
+  panel.append(dot, panelStatus, panelCounts, startButton, stopButton, saveButton, copyPathButton);
 
   function updatePanel() {
     if (captureActive) {
