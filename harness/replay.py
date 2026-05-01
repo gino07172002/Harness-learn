@@ -292,9 +292,9 @@ async def apply_event(page: Any, event: dict[str, Any], trace: dict[str, Any] | 
             selector = (event.get("target") or {}).get("selectorHint")
             clicked = False
             if selector:
-                locator = page.locator(selector)
                 try:
-                    if await locator.count() > 0:
+                    locator = page.locator(selector)
+                    if await locator.count() == 1:
                         await locator.first.click()
                         clicked = True
                 except Exception:

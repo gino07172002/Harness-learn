@@ -219,8 +219,8 @@ def test_apply_change_event_with_empty_files_list_skips_set_input_files():
 
 
 class FakeClickLocator:
-    def __init__(self, exists: bool):
-        self._count = 1 if exists else 0
+    def __init__(self, exists: bool, count: int | None = None):
+        self._count = count if count is not None else (1 if exists else 0)
         self.clicked = False
         self.first = self
 
@@ -245,8 +245,8 @@ class FakeMouse:
 
 
 class FakeClickPage:
-    def __init__(self, selector_exists: bool):
-        self.locator_obj = FakeClickLocator(exists=selector_exists)
+    def __init__(self, selector_exists: bool, selector_count: int | None = None):
+        self.locator_obj = FakeClickLocator(exists=selector_exists, count=selector_count)
         self.mouse = FakeMouse()
         self.requested_selectors: list[str] = []
 
@@ -293,6 +293,25 @@ def test_apply_click_event_falls_back_to_coords_when_selector_missing():
 
     assert page.locator_obj.clicked is False
     assert page.mouse.clicks == [(80, 120)]
+
+
+def test_apply_click_event_falls_back_to_coords_when_selector_is_ambiguous():
+    """A tag-only selectorHint such as `button` can match many elements.
+    Replaying the first match would click the wrong control; coordinates
+    preserve the original target better than a non-unique selector."""
+    from harness.replay import apply_event
+
+    page = FakeClickPage(selector_exists=True, selector_count=2)
+    event = {
+        "type": "click",
+        "target": {"selectorHint": "button"},
+        "pointer": {"x": 140, "y": 90},
+    }
+
+    asyncio.run(apply_event(page, event, trace={}))
+
+    assert page.locator_obj.clicked is False
+    assert page.mouse.clicks == [(140, 90)]
 
 
 def test_apply_click_event_falls_back_to_coords_when_no_selector_hint():
