@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 from typing import Any
 
 from playwright.async_api import async_playwright
@@ -57,6 +59,19 @@ SNAPSHOT_JS = """
 DEFAULT_REPLAY_DEBUG_METHODS = ["snapshot", "actionLog", "errors", "timing"]
 DEFAULT_REPLAY_STATE_GLOBALS = ["state"]
 
+RESTORE_ENVIRONMENT_JS = """
+((storage) => {
+  const localItems = storage.localStorage || {};
+  const sessionItems = storage.sessionStorage || {};
+  for (const [key, value] of Object.entries(localItems || {})) {
+    window.localStorage.setItem(key, value);
+  }
+  for (const [key, value] of Object.entries(sessionItems || {})) {
+    window.sessionStorage.setItem(key, value);
+  }
+})(__HARNESS_ENVIRONMENT_FIXTURE__)
+"""
+
 
 async def take_replay_snapshot(
     page: Any,
@@ -104,6 +119,55 @@ def build_replay_completed_event(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def extract_fixture_storage(trace: dict[str, Any]) -> dict[str, dict[str, str]]:
+    fixture = trace.get("environmentFixture") if isinstance(trace, dict) else None
+    storage = fixture.get("storage", {}) if isinstance(fixture, dict) else {}
+
+    def items_for(name: str) -> dict[str, str]:
+        layer = storage.get(name, {}) if isinstance(storage, dict) else {}
+        items = layer.get("items", {}) if isinstance(layer, dict) else {}
+        if not isinstance(items, dict):
+            return {}
+        return {str(key): str(value) for key, value in items.items()}
+
+    return {
+        "localStorage": items_for("localStorage"),
+        "sessionStorage": items_for("sessionStorage"),
+    }
+
+
+def extract_file_payloads(trace: dict[str, Any], event: dict[str, Any]) -> list[dict[str, Any]]:
+    fixture_map = trace.get("fileFixtures", {}) if isinstance(trace, dict) else {}
+    ids = ((event.get("form") or {}).get("files") or [])
+    payloads: list[dict[str, Any]] = []
+    if not isinstance(fixture_map, dict):
+        return payloads
+    for file_id in ids:
+        fixture = fixture_map.get(str(file_id))
+        if not isinstance(fixture, dict):
+            continue
+        raw = fixture.get("base64")
+        if not isinstance(raw, str):
+            continue
+        payloads.append({
+            "name": str(fixture.get("name") or str(file_id)),
+            "mimeType": str(fixture.get("type") or "application/octet-stream"),
+            "buffer": base64.b64decode(raw),
+        })
+    return payloads
+
+
+async def restore_environment_fixture(context: Any, trace: dict[str, Any]) -> None:
+    storage = extract_fixture_storage(trace)
+    if not storage["localStorage"] and not storage["sessionStorage"]:
+        return
+    script = RESTORE_ENVIRONMENT_JS.replace(
+        "__HARNESS_ENVIRONMENT_FIXTURE__",
+        json.dumps(storage),
+    )
+    await context.add_init_script(script)
+
+
 async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dict[str, Any]:
     session = trace.get("session", {})
     proxy_url = session.get("proxyUrl")
@@ -120,10 +184,12 @@ async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dic
 
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=not headed)
-        page = await browser.new_page(viewport=viewport)
+        context = await browser.new_context(viewport=viewport)
+        await restore_environment_fixture(context, trace)
+        page = await context.new_page()
         page.on("console", lambda msg: replay_console.append({"type": msg.type, "text": msg.text}))
         page.on("pageerror", lambda exc: replay_errors.append({"message": str(exc)}))
-        await page.goto(proxy_url)
+        await page.goto(session.get("url") or proxy_url)
 
         replay_snapshots.append(await take_replay_snapshot(page, "capture:start", debug_methods, state_globals))
 
@@ -131,7 +197,7 @@ async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dic
         first_failure = None
         for index, event in enumerate(replayable_events(trace)):
             try:
-                await apply_event(page, event)
+                await apply_event(page, event, trace)
                 completed += 1
                 replay_snapshots.append(await take_replay_snapshot(page, "after:" + str(event.get("type")), debug_methods, state_globals))
             except Exception as exc:
@@ -169,7 +235,7 @@ def align_capture_snapshots(capture_snapshots: list[dict[str, Any]]) -> list[dic
     return [s for s in capture_snapshots if s.get("reason") in allowed]
 
 
-async def apply_event(page: Any, event: dict[str, Any]) -> None:
+async def apply_event(page: Any, event: dict[str, Any], trace: dict[str, Any] | None = None) -> None:
     event_type = event.get("type")
     pointer = event.get("pointer") or {}
     key = event.get("key") or {}
@@ -206,7 +272,14 @@ async def apply_event(page: Any, event: dict[str, Any]) -> None:
     if event_type in {"input", "change"}:
         selector = (event.get("target") or {}).get("selectorHint")
         if selector:
-            await page.locator(selector).dispatch_event(event_type)
+            locator = page.locator(selector)
+            payloads = extract_file_payloads(trace or {}, event)
+            if payloads:
+                # set_input_files already fires the browser's native input/change events,
+                # so dispatching the captured event here would replay the selection twice.
+                await locator.set_input_files(payloads)
+            else:
+                await locator.dispatch_event(event_type)
 
 
 def replay_trace(trace: dict[str, Any], headed: bool = False) -> dict[str, Any]:

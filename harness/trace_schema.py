@@ -96,7 +96,14 @@ KNOWN_SESSION_FIELDS: frozenset[str] = frozenset(
 
 
 KNOWN_TOP_LEVEL_FIELDS: frozenset[str] = frozenset(
-    {"version", "session", "replay", *TOP_LEVEL_LIST_FIELDS}
+    {
+        "version",
+        "session",
+        "replay",
+        "environmentFixture",
+        "fileFixtures",
+        *TOP_LEVEL_LIST_FIELDS,
+    }
 )
 
 

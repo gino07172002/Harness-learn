@@ -33,6 +33,29 @@ def resolve_target_settings(args: argparse.Namespace, *, require_target: bool = 
             "windowGlobalsScan": pp.window_globals_scan,
             "network": pp.network,
         }
+    environment_capture_dict = None
+    if profile is not None:
+        env = profile.environment_capture
+        environment_capture_dict = {
+            "localStorage": {
+                "mode": env.local_storage.mode,
+                "keys": list(env.local_storage.keys),
+            },
+            "sessionStorage": {
+                "mode": env.session_storage.mode,
+                "keys": list(env.session_storage.keys),
+            },
+            "maxValueBytes": env.max_value_bytes,
+        }
+    file_capture_dict = None
+    if profile is not None:
+        fc = profile.file_capture
+        file_capture_dict = {
+            "mode": fc.mode,
+            "selectors": list(fc.selectors),
+            "maxFileBytes": fc.max_file_bytes,
+            "maxFiles": fc.max_files,
+        }
     return {
         "target": target,
         "target_name": target_name,
@@ -43,6 +66,8 @@ def resolve_target_settings(args: argparse.Namespace, *, require_target: bool = 
         "console_ignore_patterns": profile.console_ignore_patterns if profile else None,
         "volatile_fields": profile.volatile_fields if profile else None,
         "passive_probes": passive_probes_dict,
+        "environment_capture": environment_capture_dict,
+        "file_capture": file_capture_dict,
     }
 
 
@@ -123,6 +148,8 @@ def server_main() -> int:
         console_ignore_patterns=settings["console_ignore_patterns"],
         volatile_fields=settings["volatile_fields"],
         passive_probes=settings["passive_probes"],
+        environment_capture=settings["environment_capture"],
+        file_capture=settings["file_capture"],
     )
     return 0
 

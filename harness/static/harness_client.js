@@ -16,8 +16,11 @@
     .filter((r) => r !== null);
   const volatileFields = Array.isArray(bootstrap.volatileFields) ? bootstrap.volatileFields.slice() : [];
   const passiveProbes = bootstrap.passiveProbes || {};
+  const environmentCapture = bootstrap.environmentCapture || {};
+  const fileCapture = bootstrap.fileCapture || {};
   const networkLog = [];
   const BUILTIN_WINDOW_KEYS = new Set();
+  let nextFileFixtureId = 1;
 
   const trace = {
     version: 1,
@@ -43,6 +46,7 @@
     console: [],
     errors: [],
     screenshots: [],
+    fileFixtures: {},
     replay: null
   };
 
@@ -179,6 +183,139 @@
     };
   }
 
+  function storagePolicy(name) {
+    const raw = environmentCapture && environmentCapture[name] ? environmentCapture[name] : {};
+    const mode = raw.mode || "none";
+    return {
+      mode: mode === "allowlist" || mode === "all" ? mode : "none",
+      keys: Array.isArray(raw.keys) ? raw.keys.map((k) => String(k)) : []
+    };
+  }
+
+  function captureStorageLayer(storage, policy, maxValueBytes) {
+    const items = {};
+    const skipped = [];
+    if (policy.mode === "none") {
+      return { mode: "none", items, skipped };
+    }
+
+    const keys = policy.mode === "allowlist"
+      ? policy.keys.slice()
+      : Array.from({ length: storage.length }, (_, i) => storage.key(i)).filter((k) => k !== null);
+
+    keys.forEach((key) => {
+      const value = storage.getItem(key);
+      if (value === null) {
+        skipped.push({ key, reason: "missing" });
+        return;
+      }
+      if (value.length > maxValueBytes) {
+        skipped.push({ key, reason: "value-too-large", valueLength: value.length });
+        return;
+      }
+      items[key] = value;
+    });
+
+    return { mode: policy.mode, items, skipped };
+  }
+
+  function captureEnvironmentFixture() {
+    const localPolicy = storagePolicy("localStorage");
+    const sessionPolicy = storagePolicy("sessionStorage");
+    if (localPolicy.mode === "none" && sessionPolicy.mode === "none") {
+      return null;
+    }
+    const maxValueBytes = Number.isFinite(Number(environmentCapture.maxValueBytes))
+      ? Number(environmentCapture.maxValueBytes)
+      : 1000000;
+    return {
+      version: 1,
+      url: window.location.href,
+      storage: {
+        localStorage: captureStorageLayer(window.localStorage, localPolicy, maxValueBytes),
+        sessionStorage: captureStorageLayer(window.sessionStorage, sessionPolicy, maxValueBytes)
+      }
+    };
+  }
+
+  function filePolicyAllows(target) {
+    const mode = fileCapture.mode || "none";
+    if (mode === "none") return false;
+    if (!target || target.type !== "file") return false;
+    if (mode === "all") return true;
+    if (mode !== "allowlist") return false;
+    const selectors = Array.isArray(fileCapture.selectors) ? fileCapture.selectors : [];
+    return selectors.some((selector) => {
+      try { return target.matches(selector); } catch (_) { return false; }
+    });
+  }
+
+  function maxFileBytes() {
+    const value = Number(fileCapture.maxFileBytes);
+    return Number.isFinite(value) ? value : 10000000;
+  }
+
+  function maxFiles() {
+    const value = Number(fileCapture.maxFiles);
+    return Number.isFinite(value) ? value : 4;
+  }
+
+  function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || "");
+        const comma = result.indexOf(",");
+        resolve(comma >= 0 ? result.slice(comma + 1) : result);
+      };
+      reader.onerror = () => reject(reader.error || new Error("file read failed"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function captureInputFiles(target) {
+    const files = Array.from(target && target.files ? target.files : []);
+    const allowedCount = maxFiles();
+    const fixtureIds = [];
+    const skips = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (i >= allowedCount) {
+        skips.push({ name: file.name, reason: "too-many-files", size: file.size });
+        continue;
+      }
+      if (file.size > maxFileBytes()) {
+        skips.push({ name: file.name, reason: "file-too-large", size: file.size });
+        continue;
+      }
+      const id = "file_" + String(nextFileFixtureId++).padStart(4, "0");
+      trace.fileFixtures[id] = {
+        name: file.name,
+        type: file.type || "application/octet-stream",
+        size: file.size,
+        base64: await readFileAsBase64(file)
+      };
+      fixtureIds.push(id);
+    }
+    return { files: fixtureIds, fileSkips: skips };
+  }
+
+  async function recordFormEvent(event, extra, options) {
+    const target = event.target;
+    const form = Object.assign({}, extra && extra.form ? extra.form : {});
+    const wantsFiles = !options || options.captureFiles !== false;
+    if (wantsFiles && filePolicyAllows(target)) {
+      const captured = await captureInputFiles(target);
+      form.files = captured.files;
+      form.fileSkips = captured.fileSkips;
+    } else if (target && target.type === "file") {
+      // For the input event we don't open file payloads (that's the change event's job),
+      // but we still want a count so the trace shows the user picked something.
+      form.fileCount = target.files ? target.files.length : 0;
+    }
+    recordEvent(event, Object.assign({}, extra || {}, { form }));
+  }
+
   function probeWindowGlobals() {
     const own = Object.keys(window).filter((k) => !BUILTIN_WINDOW_KEYS.has(k) && !k.startsWith("__"));
     return own.slice(0, 80).map((k) => {
@@ -259,6 +396,10 @@
   function startCapture() {
     captureActive = true;
     captureDebugHelp();
+    const fixture = captureEnvironmentFixture();
+    if (fixture) {
+      trace.environmentFixture = fixture;
+    }
     captureSnapshot("capture:start");
     updatePanel();
   }
@@ -269,6 +410,8 @@
     updatePanel();
   }
 
+  let lastSavedPath = null;
+
   async function saveTrace() {
     captureSnapshot("capture:save");
     const response = await fetch("/__harness__/trace", {
@@ -277,7 +420,40 @@
       body: JSON.stringify(trace)
     });
     const result = await response.json();
-    panelStatus.textContent = result.ok ? "saved " + result.path : "save failed";
+    if (result.ok) {
+      lastSavedPath = result.path;
+      panelStatus.textContent = "saved " + result.path;
+      copyPathButton.style.display = "";
+      copyPathButton.textContent = "📋";
+    } else {
+      lastSavedPath = null;
+      panelStatus.textContent = "save failed";
+      copyPathButton.style.display = "none";
+    }
+  }
+
+  async function copySavedPath() {
+    if (!lastSavedPath) return;
+    let copied = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(lastSavedPath);
+        copied = true;
+      }
+    } catch (_) { /* fall through to legacy path */ }
+    if (!copied) {
+      const textarea = document.createElement("textarea");
+      textarea.value = lastSavedPath;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try { copied = document.execCommand("copy"); } catch (_) { copied = false; }
+      document.body.removeChild(textarea);
+    }
+    copyPathButton.textContent = copied ? "✓" : "✗";
+    setTimeout(() => { copyPathButton.textContent = "📋"; }, 1500);
   }
 
   function consoleArgsIgnored(args) {
@@ -405,12 +581,12 @@
 
   document.addEventListener("input", (event) => {
     const target = event.target;
-    recordEvent(event, { form: { valueLength: target && "value" in target ? String(target.value).length : 0 } });
+    recordFormEvent(event, { form: { valueLength: target && "value" in target ? String(target.value).length : 0 } }, { captureFiles: false });
   }, true);
 
   document.addEventListener("change", (event) => {
     const target = event.target;
-    recordEvent(event, { form: { checked: target && "checked" in target ? Boolean(target.checked) : null, selectedIndex: target && "selectedIndex" in target ? target.selectedIndex : null } });
+    recordFormEvent(event, { form: { checked: target && "checked" in target ? Boolean(target.checked) : null, selectedIndex: target && "selectedIndex" in target ? target.selectedIndex : null } });
   }, true);
 
   document.addEventListener("wheel", (event) => {
@@ -483,6 +659,12 @@
       opacity: 0.35;
       cursor: not-allowed;
     }
+    #__zero_mod_harness_panel button.__h_icon {
+      padding: 2px 6px;
+      font-size: 11px;
+      line-height: 1;
+      border-radius: 3px;
+    }
   `;
 
   const panel = document.createElement("div");
@@ -500,13 +682,19 @@
   const startButton = document.createElement("button");
   const stopButton = document.createElement("button");
   const saveButton = document.createElement("button");
+  const copyPathButton = document.createElement("button");
   startButton.textContent = "Start";
   stopButton.textContent = "Stop";
   saveButton.textContent = "Save";
+  copyPathButton.textContent = "📋";
+  copyPathButton.className = "__h_icon";
+  copyPathButton.title = "Copy the saved trace path to clipboard";
+  copyPathButton.style.display = "none";
   startButton.addEventListener("click", startCapture);
   stopButton.addEventListener("click", stopCapture);
   saveButton.addEventListener("click", saveTrace);
-  panel.append(dot, panelStatus, panelCounts, startButton, stopButton, saveButton);
+  copyPathButton.addEventListener("click", copySavedPath);
+  panel.append(dot, panelStatus, copyPathButton, panelCounts, startButton, stopButton, saveButton);
 
   function updatePanel() {
     if (captureActive) {
