@@ -5,7 +5,15 @@
   "host": "127.0.0.1",
   "port": 6180,
   "stateGlobals": ["state", "appState", "spineState"],
-  "volatileFields": ["debugTiming.value.frameMs"],
+  "volatileFields": [
+    "debugSnapshot.value.currentAnimId",
+    "debugSnapshot.value.animTime",
+    "debugTiming.value",
+    "debugMethodResults.timing.value",
+    "debugMethodResults.snapshot.value.currentAnimId",
+    "debugMethodResults.snapshot.value.animTime",
+    "debugMethodResults.animations.value"
+  ],
   "debugMethods": [
     "snapshot",
     "mesh",

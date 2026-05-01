@@ -14,6 +14,7 @@
   const consoleIgnorePatterns = (Array.isArray(bootstrap.consoleIgnorePatterns) ? bootstrap.consoleIgnorePatterns : [])
     .map((p) => { try { return new RegExp(p); } catch (_) { return null; } })
     .filter((r) => r !== null);
+  const volatileFields = Array.isArray(bootstrap.volatileFields) ? bootstrap.volatileFields.slice() : [];
 
   const trace = {
     version: 1,
@@ -30,6 +31,7 @@
       userAgent: navigator.userAgent,
       debugMethods: debugMethods.slice(),
       stateGlobals: stateGlobals.slice(),
+      volatileFields: volatileFields.slice(),
       debugHelp: null
     },
     events: [],

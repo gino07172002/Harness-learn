@@ -33,6 +33,7 @@ def build_injected_html(
     debug_methods: tuple[str, ...] | list[str] | None = None,
     state_globals: tuple[str, ...] | list[str] | None = None,
     console_ignore_patterns: tuple[str, ...] | list[str] | None = None,
+    volatile_fields: tuple[str, ...] | list[str] | None = None,
 ) -> str:
     bootstrap = {
         "version": 1,
@@ -41,6 +42,7 @@ def build_injected_html(
         "debugMethods": list(debug_methods) if debug_methods is not None else None,
         "stateGlobals": list(state_globals) if state_globals is not None else None,
         "consoleIgnorePatterns": list(console_ignore_patterns) if console_ignore_patterns is not None else None,
+        "volatileFields": list(volatile_fields) if volatile_fields is not None else None,
     }
     script = (
         "<script>"
@@ -65,6 +67,7 @@ class HarnessProxyHandler(BaseHTTPRequestHandler):
     debug_methods: tuple[str, ...] | None = None
     state_globals: tuple[str, ...] | None = None
     console_ignore_patterns: tuple[str, ...] | None = None
+    volatile_fields: tuple[str, ...] | None = None
 
     def do_GET(self) -> None:
         if urlparse(self.path).path == CLIENT_ROUTE:
@@ -129,6 +132,7 @@ class HarnessProxyHandler(BaseHTTPRequestHandler):
                 debug_methods=self.debug_methods,
                 state_globals=self.state_globals,
                 console_ignore_patterns=self.console_ignore_patterns,
+                volatile_fields=self.volatile_fields,
             ).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", content_type)
@@ -145,6 +149,7 @@ def run_proxy_server(
     debug_methods: tuple[str, ...] | None = None,
     state_globals: tuple[str, ...] | None = None,
     console_ignore_patterns: tuple[str, ...] | None = None,
+    volatile_fields: tuple[str, ...] | None = None,
 ) -> None:
     client_path = Path(__file__).parent / "static" / "harness_client.js"
     trace_store = TraceStore(Path("traces"))
@@ -163,6 +168,7 @@ def run_proxy_server(
     ConfiguredHarnessProxyHandler.debug_methods = debug_methods
     ConfiguredHarnessProxyHandler.state_globals = state_globals
     ConfiguredHarnessProxyHandler.console_ignore_patterns = console_ignore_patterns
+    ConfiguredHarnessProxyHandler.volatile_fields = volatile_fields
     server = ThreadingHTTPServer((host, port), ConfiguredHarnessProxyHandler)
     print(f"Serving {target_root} as {target_name} at http://{host}:{port}")
     server.serve_forever()

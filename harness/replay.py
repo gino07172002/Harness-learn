@@ -145,6 +145,7 @@ async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dic
         await browser.close()
 
     aligned_capture = align_capture_snapshots(trace.get("snapshots", []))
+    volatile_fields = list(session.get("volatileFields") or [])
 
     result: dict[str, Any] = {
         "ok": first_failure is None,
@@ -157,6 +158,7 @@ async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dic
     result["divergence"] = find_first_divergence(
         {"snapshots": aligned_capture, "errors": trace.get("errors", [])},
         result,
+        volatile_fields=volatile_fields,
     )
     return result
 

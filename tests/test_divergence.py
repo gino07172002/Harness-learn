@@ -107,3 +107,33 @@ def test_find_first_divergence_returns_none_when_aligned():
     replay = {"snapshots": [], "errors": []}
 
     assert find_first_divergence(trace, replay) is None
+
+
+def test_diff_value_skips_paths_listed_in_volatile_fields():
+    expected = {"a": {"flaky": 1, "stable": 2}}
+    actual = {"a": {"flaky": 999, "stable": 2}}
+
+    assert diff_value(expected, actual, volatile_fields=["a.flaky"]) is None
+
+
+def test_diff_value_volatile_prefix_covers_nested_subtree():
+    expected = {"timing": {"value": {"avg": 1.0, "max": 1.0, "samples": 5}}}
+    actual = {"timing": {"value": {"avg": 9.9, "max": 9.9, "samples": 5}}}
+
+    assert diff_value(expected, actual, volatile_fields=["timing.value"]) is None
+
+
+def test_diff_value_still_reports_non_volatile_divergence():
+    expected = {"timing": {"value": {"avg": 1.0}}, "count": 5}
+    actual = {"timing": {"value": {"avg": 9.9}}, "count": 7}
+
+    result = diff_value(expected, actual, volatile_fields=["timing"])
+
+    assert result == ("count", 5, 7)
+
+
+def test_first_snapshot_divergence_passes_volatile_fields_through():
+    capture = [{"reason": "x", "debugSnapshot": {"ok": True, "value": {"frameMs": 0.5, "count": 1}}, "stateSummary": None}]
+    replay = [{"reason": "x", "debugSnapshot": {"ok": True, "value": {"frameMs": 9.9, "count": 1}}, "stateSummary": None}]
+
+    assert first_snapshot_divergence(capture, replay, volatile_fields=["debugSnapshot.value.frameMs"]) is None

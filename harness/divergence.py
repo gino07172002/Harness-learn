@@ -3,25 +3,47 @@ from __future__ import annotations
 from typing import Any
 
 
-def diff_value(expected: Any, actual: Any, path: str = "") -> tuple[str, Any, Any] | None:
+def is_volatile(path: str, volatile_fields: tuple[str, ...] | list[str] | None) -> bool:
+    if not volatile_fields:
+        return False
+    for prefix in volatile_fields:
+        if path == prefix or path.startswith(prefix + ".") or path.startswith(prefix + "["):
+            return True
+    return False
+
+
+def diff_value(
+    expected: Any,
+    actual: Any,
+    path: str = "",
+    volatile_fields: tuple[str, ...] | list[str] | None = None,
+) -> tuple[str, Any, Any] | None:
+    if is_volatile(path, volatile_fields):
+        return None
     if type(expected) is not type(actual):
         return (path or "<root>", expected, actual)
     if isinstance(expected, dict):
         for key in expected:
+            sub_path = f"{path}.{key}".lstrip(".")
+            if is_volatile(sub_path, volatile_fields):
+                continue
             if key not in actual:
-                return (f"{path}.{key}".lstrip("."), expected[key], None)
-            sub = diff_value(expected[key], actual[key], f"{path}.{key}".lstrip("."))
+                return (sub_path, expected[key], None)
+            sub = diff_value(expected[key], actual[key], sub_path, volatile_fields)
             if sub is not None:
                 return sub
         for key in actual:
+            sub_path = f"{path}.{key}".lstrip(".")
+            if is_volatile(sub_path, volatile_fields):
+                continue
             if key not in expected:
-                return (f"{path}.{key}".lstrip("."), None, actual[key])
+                return (sub_path, None, actual[key])
         return None
     if isinstance(expected, list):
         if len(expected) != len(actual):
             return (f"{path}.length".lstrip("."), len(expected), len(actual))
         for index, (a, b) in enumerate(zip(expected, actual)):
-            sub = diff_value(a, b, f"{path}[{index}]")
+            sub = diff_value(a, b, f"{path}[{index}]", volatile_fields)
             if sub is not None:
                 return sub
         return None
@@ -36,9 +58,15 @@ SNAPSHOT_COMPARE_FIELDS = ("debugSnapshot", "stateSummary")
 def compare_snapshot_pair(
     capture_snapshot: dict[str, Any],
     replay_snapshot: dict[str, Any],
+    volatile_fields: tuple[str, ...] | list[str] | None = None,
 ) -> tuple[str, Any, Any] | None:
     for field in SNAPSHOT_COMPARE_FIELDS:
-        diff = diff_value(capture_snapshot.get(field), replay_snapshot.get(field), field)
+        diff = diff_value(
+            capture_snapshot.get(field),
+            replay_snapshot.get(field),
+            field,
+            volatile_fields,
+        )
         if diff is not None:
             return diff
     return None
@@ -47,12 +75,13 @@ def compare_snapshot_pair(
 def first_snapshot_divergence(
     capture_snapshots: list[dict[str, Any]],
     replay_snapshots: list[dict[str, Any]],
+    volatile_fields: tuple[str, ...] | list[str] | None = None,
 ) -> dict[str, Any] | None:
     pairs = min(len(capture_snapshots), len(replay_snapshots))
     for index in range(pairs):
         cap = capture_snapshots[index]
         rep = replay_snapshots[index]
-        diff = compare_snapshot_pair(cap, rep)
+        diff = compare_snapshot_pair(cap, rep, volatile_fields)
         if diff is not None:
             path, expected, actual = diff
             return {
@@ -104,10 +133,15 @@ def first_error_divergence(
     return None
 
 
-def find_first_divergence(trace: dict[str, Any], replay_result: dict[str, Any]) -> dict[str, Any] | None:
+def find_first_divergence(
+    trace: dict[str, Any],
+    replay_result: dict[str, Any],
+    volatile_fields: tuple[str, ...] | list[str] | None = None,
+) -> dict[str, Any] | None:
     snapshot_diff = first_snapshot_divergence(
         trace.get("snapshots", []),
         replay_result.get("snapshots", []),
+        volatile_fields,
     )
     if snapshot_diff is not None:
         return snapshot_diff
