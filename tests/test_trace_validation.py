@@ -56,3 +56,17 @@ def test_validate_trace_accepts_optional_environment_fixture_object():
     }
 
     assert validate_trace(trace) == []
+
+
+def test_validate_trace_accepts_optional_file_fixtures_object():
+    trace = valid_trace()
+    trace["fileFixtures"] = {
+        "file_0001": {
+            "name": "sample.txt",
+            "type": "text/plain",
+            "size": 5,
+            "base64": "aGVsbG8=",
+        }
+    }
+
+    assert validate_trace(trace) == []

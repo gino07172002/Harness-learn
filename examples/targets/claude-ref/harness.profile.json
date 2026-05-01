@@ -63,5 +63,14 @@
       "mode": "none"
     },
     "maxValueBytes": 5000000
+  },
+  "fileCapture": {
+    "mode": "allowlist",
+    "selectors": [
+      "#fileInput",
+      "#projectLoadInput"
+    ],
+    "maxFileBytes": 10000000,
+    "maxFiles": 4
   }
 }
