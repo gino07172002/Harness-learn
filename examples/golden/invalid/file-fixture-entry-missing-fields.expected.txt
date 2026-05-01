@@ -1,0 +1,3 @@
+trace.fileFixtures['file_0001'].type: missing
+trace.fileFixtures['file_0001'].size: missing
+trace.fileFixtures['file_0001'].base64: missing

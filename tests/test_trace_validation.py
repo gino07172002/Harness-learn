@@ -108,3 +108,66 @@ def test_validate_trace_with_warnings_accepts_capture_stop_and_save_reasons():
 
     assert outcome.errors == []
     assert outcome.warnings == []
+
+
+def test_validate_trace_rejects_environment_fixture_not_dict():
+    trace = valid_trace()
+    trace["environmentFixture"] = "not-object"
+
+    errors = validate_trace(trace)
+
+    assert "trace.environmentFixture: expected dict, got str" in errors
+
+
+def test_validate_trace_rejects_file_fixtures_not_dict():
+    trace = valid_trace()
+    trace["fileFixtures"] = "not-object"
+
+    errors = validate_trace(trace)
+
+    assert "trace.fileFixtures: expected dict, got str" in errors
+
+
+def test_validate_trace_rejects_file_fixture_entry_missing_required():
+    trace = valid_trace()
+    trace["fileFixtures"] = {"file_0001": {"name": "x.txt"}}
+
+    errors = validate_trace(trace)
+
+    assert "trace.fileFixtures['file_0001'].type: missing" in errors
+    assert "trace.fileFixtures['file_0001'].size: missing" in errors
+    assert "trace.fileFixtures['file_0001'].base64: missing" in errors
+
+
+def test_validate_trace_rejects_file_fixture_size_wrong_type():
+    trace = valid_trace()
+    trace["fileFixtures"] = {
+        "file_0001": {"name": "x", "type": "t", "size": "big", "base64": "AA=="}
+    }
+
+    errors = validate_trace(trace)
+
+    assert "trace.fileFixtures['file_0001'].size: expected number, got str" in errors
+
+
+def test_validate_trace_rejects_environment_fixture_storage_not_dict():
+    trace = valid_trace()
+    trace["environmentFixture"] = {"version": 1, "storage": "not-a-dict"}
+
+    errors = validate_trace(trace)
+
+    assert "trace.environmentFixture.storage: expected dict, got str" in errors
+
+
+def test_validate_trace_rejects_environment_fixture_storage_layer_items_not_dict():
+    trace = valid_trace()
+    trace["environmentFixture"] = {
+        "storage": {"localStorage": {"items": []}}
+    }
+
+    errors = validate_trace(trace)
+
+    assert (
+        "trace.environmentFixture.storage.localStorage.items: expected dict, got list"
+        in errors
+    )

@@ -246,6 +246,78 @@ def validate_divergence(divergence: Any, path: str, outcome: ValidationOutcome) 
             outcome.errors.append(f"{path}.{required}: missing")
 
 
+def validate_environment_fixture(fixture: Any, outcome: ValidationOutcome) -> None:
+    path = "trace.environmentFixture"
+    if not isinstance(fixture, dict):
+        outcome.errors.append(f"{path}: expected dict, got {type_name(fixture)}")
+        return
+    if "version" in fixture and fixture["version"] != 1:
+        outcome.errors.append(
+            f"{path}.version: expected 1, got {fixture['version']!r}"
+        )
+    if "url" in fixture and not isinstance(fixture["url"], str):
+        outcome.errors.append(
+            f"{path}.url: expected string, got {type_name(fixture['url'])}"
+        )
+    if "storage" in fixture:
+        storage = fixture["storage"]
+        if not isinstance(storage, dict):
+            outcome.errors.append(
+                f"{path}.storage: expected dict, got {type_name(storage)}"
+            )
+            return
+        for layer_name in ("localStorage", "sessionStorage"):
+            if layer_name not in storage:
+                continue
+            layer = storage[layer_name]
+            layer_path = f"{path}.storage.{layer_name}"
+            if not isinstance(layer, dict):
+                outcome.errors.append(
+                    f"{layer_path}: expected dict, got {type_name(layer)}"
+                )
+                continue
+            if "items" in layer and not isinstance(layer["items"], dict):
+                outcome.errors.append(
+                    f"{layer_path}.items: expected dict, got {type_name(layer['items'])}"
+                )
+            if "skipped" in layer and not isinstance(layer["skipped"], list):
+                outcome.errors.append(
+                    f"{layer_path}.skipped: expected list, got {type_name(layer['skipped'])}"
+                )
+
+
+FILE_FIXTURE_REQUIRED_FIELDS: tuple[str, ...] = ("name", "type", "size", "base64")
+
+
+def validate_file_fixtures(fixtures: Any, outcome: ValidationOutcome) -> None:
+    path = "trace.fileFixtures"
+    if not isinstance(fixtures, dict):
+        outcome.errors.append(f"{path}: expected dict, got {type_name(fixtures)}")
+        return
+    for key, entry in fixtures.items():
+        entry_path = f"{path}[{key!r}]"
+        if not isinstance(key, str):
+            outcome.errors.append(f"{path}: keys must be strings")
+            continue
+        if not isinstance(entry, dict):
+            outcome.errors.append(
+                f"{entry_path}: expected dict, got {type_name(entry)}"
+            )
+            continue
+        for field_name in FILE_FIXTURE_REQUIRED_FIELDS:
+            if field_name not in entry:
+                outcome.errors.append(f"{entry_path}.{field_name}: missing")
+        if "size" in entry and not isinstance(entry["size"], (int, float)):
+            outcome.errors.append(
+                f"{entry_path}.size: expected number, got {type_name(entry['size'])}"
+            )
+        for str_field in ("name", "type", "base64"):
+            if str_field in entry and not isinstance(entry[str_field], str):
+                outcome.errors.append(
+                    f"{entry_path}.{str_field}: expected string, got {type_name(entry[str_field])}"
+                )
+
+
 def validate_replay(replay: Any, outcome: ValidationOutcome) -> None:
     path = "trace.replay"
     if replay is None:
@@ -302,6 +374,11 @@ def validate_trace_outcome(trace: Any) -> ValidationOutcome:
         outcome.errors.append("trace.replay: missing")
     else:
         validate_replay(trace["replay"], outcome)
+
+    if "environmentFixture" in trace:
+        validate_environment_fixture(trace["environmentFixture"], outcome)
+    if "fileFixtures" in trace:
+        validate_file_fixtures(trace["fileFixtures"], outcome)
 
     _check_unknown_keys(trace, KNOWN_TOP_LEVEL_FIELDS, "trace", outcome)
 
