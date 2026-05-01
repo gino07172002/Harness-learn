@@ -417,23 +417,86 @@
     recordEvent(event, { wheel: { deltaX: event.deltaX, deltaY: event.deltaY, deltaMode: event.deltaMode } });
   }, true);
 
+  const harnessStyle = document.createElement("style");
+  harnessStyle.textContent = `
+    @keyframes __harness_pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.4; transform: scale(0.7); }
+    }
+    #__zero_mod_harness_panel {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 2147483647;
+      padding: 10px 14px;
+      background: #1a1a1a;
+      color: #fff;
+      font: 14px system-ui, -apple-system, sans-serif;
+      border: 2px solid #555;
+      border-radius: 8px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+    }
+    #__zero_mod_harness_panel.recording {
+      background: #b00020;
+      border-color: #ff5252;
+      box-shadow: 0 0 16px rgba(255, 82, 82, 0.8);
+    }
+    #__zero_mod_harness_panel .__h_dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #555;
+      flex-shrink: 0;
+    }
+    #__zero_mod_harness_panel.recording .__h_dot {
+      background: #ff3030;
+      animation: __harness_pulse 1s ease-in-out infinite;
+      box-shadow: 0 0 8px #ff3030;
+    }
+    #__zero_mod_harness_panel .__h_status {
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    #__zero_mod_harness_panel .__h_counts {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 13px;
+      opacity: 0.85;
+    }
+    #__zero_mod_harness_panel button {
+      font: inherit;
+      font-size: 13px;
+      padding: 4px 10px;
+      border: 1px solid #777;
+      border-radius: 4px;
+      background: #2a2a2a;
+      color: #fff;
+      cursor: pointer;
+    }
+    #__zero_mod_harness_panel button:hover:not(:disabled) {
+      background: #3a3a3a;
+    }
+    #__zero_mod_harness_panel button:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+  `;
+
   const panel = document.createElement("div");
   panel.id = "__zero_mod_harness_panel";
-  panel.style.position = "fixed";
-  panel.style.top = "8px";
-  panel.style.right = "8px";
-  panel.style.zIndex = "2147483647";
-  panel.style.padding = "8px";
-  panel.style.background = "#111";
-  panel.style.color = "#fff";
-  panel.style.font = "12px system-ui, sans-serif";
-  panel.style.border = "1px solid #555";
-  panel.style.borderRadius = "4px";
-  panel.style.display = "flex";
-  panel.style.gap = "6px";
-  panel.style.alignItems = "center";
+
+  const dot = document.createElement("span");
+  dot.className = "__h_dot";
 
   const panelStatus = document.createElement("span");
+  panelStatus.className = "__h_status";
+
+  const panelCounts = document.createElement("span");
+  panelCounts.className = "__h_counts";
+
   const startButton = document.createElement("button");
   const stopButton = document.createElement("button");
   const saveButton = document.createElement("button");
@@ -443,10 +506,20 @@
   startButton.addEventListener("click", startCapture);
   stopButton.addEventListener("click", stopCapture);
   saveButton.addEventListener("click", saveTrace);
-  panel.append(panelStatus, startButton, stopButton, saveButton);
+  panel.append(dot, panelStatus, panelCounts, startButton, stopButton, saveButton);
 
   function updatePanel() {
-    panelStatus.textContent = "HARNESS " + (captureActive ? "recording" : "idle") + " e:" + trace.events.length + " s:" + trace.snapshots.length;
+    if (captureActive) {
+      panel.classList.add("recording");
+      panelStatus.textContent = "● REC";
+    } else {
+      panel.classList.remove("recording");
+      panelStatus.textContent = "HARNESS idle";
+    }
+    panelCounts.textContent = "e:" + trace.events.length + " s:" + trace.snapshots.length;
+    startButton.disabled = captureActive;
+    stopButton.disabled = !captureActive;
+    saveButton.disabled = trace.events.length === 0 && trace.snapshots.length === 0;
   }
 
   window.__ZERO_MOD_HARNESS__ = {
@@ -459,6 +532,7 @@
   };
 
   window.addEventListener("DOMContentLoaded", () => {
+    document.head.appendChild(harnessStyle);
     document.body.appendChild(panel);
     updatePanel();
   });
