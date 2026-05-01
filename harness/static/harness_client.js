@@ -17,8 +17,10 @@
   const volatileFields = Array.isArray(bootstrap.volatileFields) ? bootstrap.volatileFields.slice() : [];
   const passiveProbes = bootstrap.passiveProbes || {};
   const environmentCapture = bootstrap.environmentCapture || {};
+  const fileCapture = bootstrap.fileCapture || {};
   const networkLog = [];
   const BUILTIN_WINDOW_KEYS = new Set();
+  let nextFileFixtureId = 1;
 
   const trace = {
     version: 1,
@@ -44,6 +46,7 @@
     console: [],
     errors: [],
     screenshots: [],
+    fileFixtures: {},
     replay: null
   };
 
@@ -233,6 +236,79 @@
         sessionStorage: captureStorageLayer(window.sessionStorage, sessionPolicy, maxValueBytes)
       }
     };
+  }
+
+  function filePolicyAllows(target) {
+    const mode = fileCapture.mode || "none";
+    if (mode === "none") return false;
+    if (!target || target.type !== "file") return false;
+    if (mode === "all") return true;
+    if (mode !== "allowlist") return false;
+    const selectors = Array.isArray(fileCapture.selectors) ? fileCapture.selectors : [];
+    return selectors.some((selector) => {
+      try { return target.matches(selector); } catch (_) { return false; }
+    });
+  }
+
+  function maxFileBytes() {
+    const value = Number(fileCapture.maxFileBytes);
+    return Number.isFinite(value) ? value : 10000000;
+  }
+
+  function maxFiles() {
+    const value = Number(fileCapture.maxFiles);
+    return Number.isFinite(value) ? value : 4;
+  }
+
+  function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || "");
+        const comma = result.indexOf(",");
+        resolve(comma >= 0 ? result.slice(comma + 1) : result);
+      };
+      reader.onerror = () => reject(reader.error || new Error("file read failed"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function captureInputFiles(target) {
+    const files = Array.from(target && target.files ? target.files : []);
+    const allowedCount = maxFiles();
+    const fixtureIds = [];
+    const skips = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (i >= allowedCount) {
+        skips.push({ name: file.name, reason: "too-many-files", size: file.size });
+        continue;
+      }
+      if (file.size > maxFileBytes()) {
+        skips.push({ name: file.name, reason: "file-too-large", size: file.size });
+        continue;
+      }
+      const id = "file_" + String(nextFileFixtureId++).padStart(4, "0");
+      trace.fileFixtures[id] = {
+        name: file.name,
+        type: file.type || "application/octet-stream",
+        size: file.size,
+        base64: await readFileAsBase64(file)
+      };
+      fixtureIds.push(id);
+    }
+    return { files: fixtureIds, fileSkips: skips };
+  }
+
+  async function recordFormEvent(event, extra) {
+    const target = event.target;
+    const form = Object.assign({}, extra && extra.form ? extra.form : {});
+    if (filePolicyAllows(target)) {
+      const captured = await captureInputFiles(target);
+      form.files = captured.files;
+      form.fileSkips = captured.fileSkips;
+    }
+    recordEvent(event, Object.assign({}, extra || {}, { form }));
   }
 
   function probeWindowGlobals() {
@@ -465,12 +541,12 @@
 
   document.addEventListener("input", (event) => {
     const target = event.target;
-    recordEvent(event, { form: { valueLength: target && "value" in target ? String(target.value).length : 0 } });
+    recordFormEvent(event, { form: { valueLength: target && "value" in target ? String(target.value).length : 0 } });
   }, true);
 
   document.addEventListener("change", (event) => {
     const target = event.target;
-    recordEvent(event, { form: { checked: target && "checked" in target ? Boolean(target.checked) : null, selectedIndex: target && "selectedIndex" in target ? target.selectedIndex : null } });
+    recordFormEvent(event, { form: { checked: target && "checked" in target ? Boolean(target.checked) : null, selectedIndex: target && "selectedIndex" in target ? target.selectedIndex : null } });
   }, true);
 
   document.addEventListener("wheel", (event) => {
