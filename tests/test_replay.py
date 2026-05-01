@@ -109,3 +109,68 @@ def test_restore_environment_fixture_skips_empty_fixture():
     asyncio.run(restore_environment_fixture(context, {}))
 
     assert context.calls == []
+
+
+def test_extract_file_payloads_returns_playwright_payloads():
+    trace = {
+        "fileFixtures": {
+            "file_0001": {
+                "name": "sample.txt",
+                "type": "text/plain",
+                "base64": "aGVsbG8=",
+            }
+        }
+    }
+    event = {"form": {"files": ["file_0001"]}}
+
+    from harness.replay import extract_file_payloads
+
+    payloads = extract_file_payloads(trace, event)
+
+    assert payloads == [{"name": "sample.txt", "mimeType": "text/plain", "buffer": b"hello"}]
+
+
+class FakeLocator:
+    def __init__(self):
+        self.input_files = []
+        self.dispatched = []
+
+    async def set_input_files(self, payloads):
+        self.input_files.append(payloads)
+
+    async def dispatch_event(self, event_type):
+        self.dispatched.append(event_type)
+
+
+class FakeFilePage:
+    def __init__(self):
+        self.fake_locator = FakeLocator()
+
+    def locator(self, selector):
+        assert selector == "#fileInput"
+        return self.fake_locator
+
+
+def test_apply_file_input_event_sets_files_before_dispatch():
+    from harness.replay import apply_event
+
+    page = FakeFilePage()
+    trace = {
+        "fileFixtures": {
+            "file_0001": {
+                "name": "sample.txt",
+                "type": "text/plain",
+                "base64": "aGVsbG8=",
+            }
+        }
+    }
+    event = {
+        "type": "change",
+        "target": {"selectorHint": "#fileInput"},
+        "form": {"files": ["file_0001"]},
+    }
+
+    asyncio.run(apply_event(page, event, trace))
+
+    assert page.fake_locator.input_files == [[{"name": "sample.txt", "mimeType": "text/plain", "buffer": b"hello"}]]
+    assert page.fake_locator.dispatched == ["change"]

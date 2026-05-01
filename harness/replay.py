@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 from typing import Any
 
@@ -135,6 +136,27 @@ def extract_fixture_storage(trace: dict[str, Any]) -> dict[str, dict[str, str]]:
     }
 
 
+def extract_file_payloads(trace: dict[str, Any], event: dict[str, Any]) -> list[dict[str, Any]]:
+    fixture_map = trace.get("fileFixtures", {}) if isinstance(trace, dict) else {}
+    ids = ((event.get("form") or {}).get("files") or [])
+    payloads: list[dict[str, Any]] = []
+    if not isinstance(fixture_map, dict):
+        return payloads
+    for file_id in ids:
+        fixture = fixture_map.get(str(file_id))
+        if not isinstance(fixture, dict):
+            continue
+        raw = fixture.get("base64")
+        if not isinstance(raw, str):
+            continue
+        payloads.append({
+            "name": str(fixture.get("name") or str(file_id)),
+            "mimeType": str(fixture.get("type") or "application/octet-stream"),
+            "buffer": base64.b64decode(raw),
+        })
+    return payloads
+
+
 async def restore_environment_fixture(context: Any, trace: dict[str, Any]) -> None:
     storage = extract_fixture_storage(trace)
     if not storage["localStorage"] and not storage["sessionStorage"]:
@@ -175,7 +197,7 @@ async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dic
         first_failure = None
         for index, event in enumerate(replayable_events(trace)):
             try:
-                await apply_event(page, event)
+                await apply_event(page, event, trace)
                 completed += 1
                 replay_snapshots.append(await take_replay_snapshot(page, "after:" + str(event.get("type")), debug_methods, state_globals))
             except Exception as exc:
@@ -213,7 +235,7 @@ def align_capture_snapshots(capture_snapshots: list[dict[str, Any]]) -> list[dic
     return [s for s in capture_snapshots if s.get("reason") in allowed]
 
 
-async def apply_event(page: Any, event: dict[str, Any]) -> None:
+async def apply_event(page: Any, event: dict[str, Any], trace: dict[str, Any] | None = None) -> None:
     event_type = event.get("type")
     pointer = event.get("pointer") or {}
     key = event.get("key") or {}
@@ -250,7 +272,11 @@ async def apply_event(page: Any, event: dict[str, Any]) -> None:
     if event_type in {"input", "change"}:
         selector = (event.get("target") or {}).get("selectorHint")
         if selector:
-            await page.locator(selector).dispatch_event(event_type)
+            locator = page.locator(selector)
+            payloads = extract_file_payloads(trace or {}, event)
+            if payloads:
+                await locator.set_input_files(payloads)
+            await locator.dispatch_event(event_type)
 
 
 def replay_trace(trace: dict[str, Any], headed: bool = False) -> dict[str, Any]:
