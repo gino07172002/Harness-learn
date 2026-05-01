@@ -77,12 +77,21 @@ def managed_fixture_server(
             process.wait(timeout=5.0)
 
 
-def run_report_regression(golden_trace: Path, golden_report: Path) -> list[str]:
+def run_report_regression(
+    golden_trace: Path,
+    golden_report: Path,
+    volatile_fields_override: list[str] | tuple[str, ...] | None = None,
+    extra_volatile_fields: list[str] | tuple[str, ...] | None = None,
+) -> list[str]:
     trace = json.loads(golden_trace.read_text(encoding="utf-8"))
     errors = validate_trace(trace)
     if errors:
         return errors
-    replay_result = replay_trace(trace)
+    replay_result = replay_trace(
+        trace,
+        volatile_fields_override=volatile_fields_override,
+        extra_volatile_fields=extra_volatile_fields,
+    )
     if not replay_result.get("ok"):
         return [f"golden replay failed: {replay_result.get('firstFailure') or replay_result.get('error')}"]
     current_report = build_report_markdown(attach_replay_result(trace, replay_result))

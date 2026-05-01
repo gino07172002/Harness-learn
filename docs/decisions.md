@@ -9,6 +9,37 @@ Do not retroactively backfill history.
 
 ---
 
+## 2026-05-01 — Volatility override at comparison time (clarification)
+
+The earlier entry said the profile is the single source of truth and a
+trace can be re-diffed under different policies. In practice the client
+*also* snapshots the active `volatileFields` into `trace.session` at
+capture time, and `harness/replay.py` was reading that frozen list. Net
+effect: changing the profile only affected *future* captures; existing
+traces kept their old policy.
+
+Reconciled by giving replay and regression an explicit override knob
+rather than re-routing capture. `replay_trace_async` and
+`run_report_regression` accept `volatile_fields_override` (replaces the
+trace's frozen list) and `extra_volatile_fields` (appends). The CLIs
+expose this as `replay_runner.py --profile / --volatile-field` and
+`harness_regress.py --volatile-field / --ignore-trace-volatile-fields`.
+
+`harness_regress.py` defaults to using the profile's `volatileFields` as
+the override (matching the architecture decision); the trace's frozen
+list is the fallback when no profile is in effect. The trace continues
+to record the policy at capture time as historical context, but it is
+no longer load-bearing if a profile is supplied.
+
+Alternative considered: stop writing `volatileFields` into the trace
+entirely and have replay always re-read the profile. Rejected because
+some traces are reviewed standalone (no profile available, e.g. a trace
+file shared in a bug report), and the snapshot-into-trace path keeps
+those self-contained. Policy *override* preserves both properties: the
+trace remains self-describing, but the profile wins when present.
+
+---
+
 ## 2026-05-01 — Volatility lives in the profile, not the trace
 
 `harness.profile.json` carries `volatileFields`; the trace itself stores
@@ -19,6 +50,9 @@ Alternative considered: write a per-target suppression list into every
 trace at capture time. Rejected because traces would become a moving
 target — every policy change would re-bake every golden, and an old
 trace could not be re-evaluated under a new policy.
+
+(See the 2026-05-01 clarification above for the implementation gap and
+override knobs.)
 
 ---
 

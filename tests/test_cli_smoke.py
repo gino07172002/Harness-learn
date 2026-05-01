@@ -48,6 +48,24 @@ def test_harness_regress_help_exits_successfully():
     assert "Run golden trace regression" in result.stdout
 
 
+def test_replay_runner_accepts_profile_and_volatile_field_flags():
+    """Codex review (post 7a263df / c96b266): the architecture decision is
+    that profile is the source of truth at comparison time, but replay used
+    to read only trace.session.volatileFields. The CLI must surface the
+    override knob so a user can re-diff old traces under a new policy."""
+    result = run_script("replay_runner.py", "--help")
+    assert result.returncode == 0
+    assert "--profile" in result.stdout
+    assert "--volatile-field" in result.stdout
+
+
+def test_harness_regress_accepts_volatile_override_flags():
+    result = run_script("harness_regress.py", "--help")
+    assert result.returncode == 0
+    assert "--volatile-field" in result.stdout
+    assert "--ignore-trace-volatile-fields" in result.stdout
+
+
 def test_validate_trace_strict_passes_realistic_session_fixture():
     """Strict mode promotes warnings to errors. A realistic fixture that
     includes the live session fields, capture:save snapshot reason, and

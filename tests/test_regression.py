@@ -27,6 +27,40 @@ def test_compare_reports_explains_mismatch():
     assert "normalized report differs" in errors[0]
 
 
+def test_run_report_regression_forwards_volatile_override(tmp_path, monkeypatch):
+    """Codex review follow-up: comparison-time volatility must come from
+    profile, not from the trace's frozen list. Confirm the kwargs reach
+    replay_trace."""
+    from harness import regression as regression_module
+
+    captured: dict = {}
+
+    def fake_replay_trace(trace, **kwargs):
+        captured.update(kwargs)
+        return {"ok": True, "completedEvents": 0, "snapshots": [], "errors": []}
+
+    monkeypatch.setattr(regression_module, "replay_trace", fake_replay_trace)
+    monkeypatch.setattr(regression_module, "build_report_markdown", lambda trace: "x")
+    monkeypatch.setattr(regression_module, "validate_trace", lambda trace: [])
+    monkeypatch.setattr(regression_module, "compare_reports", lambda current, golden: [])
+
+    golden_trace = tmp_path / "g.json"
+    golden_trace.write_text('{"version":1}', encoding="utf-8")
+    golden_report = tmp_path / "g.md"
+    golden_report.write_text("x", encoding="utf-8")
+
+    errors = regression_module.run_report_regression(
+        golden_trace,
+        golden_report,
+        volatile_fields_override=["live.policy"],
+        extra_volatile_fields=["explicit.path"],
+    )
+
+    assert errors == []
+    assert captured.get("volatile_fields_override") == ["live.policy"]
+    assert captured.get("extra_volatile_fields") == ["explicit.path"]
+
+
 def test_volatile_field_suppression_proven_negatively_via_divergence():
     """Negative proof for volatility coverage spec.
 

@@ -1,6 +1,12 @@
 import asyncio
 
-from harness.replay import attach_replay_result, extract_fixture_storage, replayable_events, restore_environment_fixture
+from harness.replay import (
+    attach_replay_result,
+    extract_fixture_storage,
+    replayable_events,
+    resolve_volatile_fields,
+    restore_environment_fixture,
+)
 
 
 def test_replayable_events_keeps_user_input_events():
@@ -210,3 +216,42 @@ def test_apply_change_event_with_empty_files_list_skips_set_input_files():
     # form.files is present but empty -> no payload to install, fall back to dispatch.
     assert page.fake_locator.input_files == []
     assert page.fake_locator.dispatched == ["change"]
+
+
+def test_resolve_volatile_fields_uses_trace_when_no_override():
+    trace = {"session": {"volatileFields": ["a", "b"]}}
+
+    assert resolve_volatile_fields(trace, override=None) == ["a", "b"]
+
+
+def test_resolve_volatile_fields_override_replaces_trace_list():
+    trace = {"session": {"volatileFields": ["frozen.policy"]}}
+
+    assert resolve_volatile_fields(trace, override=["live.policy"]) == ["live.policy"]
+
+
+def test_resolve_volatile_fields_extra_appends_to_base():
+    trace = {"session": {"volatileFields": ["a"]}}
+
+    assert resolve_volatile_fields(trace, override=None, extra=["b", "c"]) == ["a", "b", "c"]
+
+
+def test_resolve_volatile_fields_override_combines_with_extra():
+    trace = {"session": {"volatileFields": ["frozen"]}}
+
+    assert resolve_volatile_fields(
+        trace, override=["live"], extra=["explicit"]
+    ) == ["live", "explicit"]
+
+
+def test_resolve_volatile_fields_empty_override_disables_trace_policy():
+    trace = {"session": {"volatileFields": ["frozen.policy"]}}
+
+    # override=[] is the explicit "no policy" signal — it must not fall
+    # through to the trace's frozen list.
+    assert resolve_volatile_fields(trace, override=[]) == []
+
+
+def test_resolve_volatile_fields_handles_missing_session():
+    assert resolve_volatile_fields({}, override=None) == []
+    assert resolve_volatile_fields({}, override=None, extra=["x"]) == ["x"]

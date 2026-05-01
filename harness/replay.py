@@ -168,7 +168,36 @@ async def restore_environment_fixture(context: Any, trace: dict[str, Any]) -> No
     await context.add_init_script(script)
 
 
-async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dict[str, Any]:
+def resolve_volatile_fields(
+    trace: dict[str, Any],
+    override: list[str] | tuple[str, ...] | None,
+    extra: list[str] | tuple[str, ...] | None = None,
+) -> list[str]:
+    """Decide which volatileFields list to use at comparison time.
+
+    The architecture rule (docs/decisions.md) is: capture snapshots the
+    policy as historical context, but comparison-time can override. If
+    `override` is given (not None), it replaces the trace-side list
+    entirely. `extra` always appends. Passing override=[] means "use no
+    volatility policy at all"; not passing override means "trust the
+    trace".
+    """
+    if override is not None:
+        base = list(override)
+    else:
+        session = trace.get("session", {}) if isinstance(trace, dict) else {}
+        base = list(session.get("volatileFields") or [])
+    if extra:
+        base.extend(extra)
+    return base
+
+
+async def replay_trace_async(
+    trace: dict[str, Any],
+    headed: bool = False,
+    volatile_fields_override: list[str] | tuple[str, ...] | None = None,
+    extra_volatile_fields: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, Any]:
     session = trace.get("session", {})
     proxy_url = session.get("proxyUrl")
     viewport = session.get("viewport") or {"width": 1440, "height": 900}
@@ -211,7 +240,9 @@ async def replay_trace_async(trace: dict[str, Any], headed: bool = False) -> dic
         await browser.close()
 
     aligned_capture = align_capture_snapshots(trace.get("snapshots", []))
-    volatile_fields = list(session.get("volatileFields") or [])
+    volatile_fields = resolve_volatile_fields(
+        trace, volatile_fields_override, extra_volatile_fields
+    )
 
     result: dict[str, Any] = {
         "ok": first_failure is None,
@@ -282,5 +313,17 @@ async def apply_event(page: Any, event: dict[str, Any], trace: dict[str, Any] | 
                 await locator.dispatch_event(event_type)
 
 
-def replay_trace(trace: dict[str, Any], headed: bool = False) -> dict[str, Any]:
-    return asyncio.run(replay_trace_async(trace, headed=headed))
+def replay_trace(
+    trace: dict[str, Any],
+    headed: bool = False,
+    volatile_fields_override: list[str] | tuple[str, ...] | None = None,
+    extra_volatile_fields: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    return asyncio.run(
+        replay_trace_async(
+            trace,
+            headed=headed,
+            volatile_fields_override=volatile_fields_override,
+            extra_volatile_fields=extra_volatile_fields,
+        )
+    )

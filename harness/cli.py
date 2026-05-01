@@ -86,6 +86,19 @@ def build_replay_parser() -> argparse.ArgumentParser:
     parser.add_argument("trace", type=Path, help="Trace JSON file")
     parser.add_argument("--headed", action="store_true", help="Run Chromium in headed mode")
     parser.add_argument("--run-log", type=Path, help="Optional JSONL run log path")
+    parser.add_argument(
+        "--profile",
+        type=Path,
+        help="harness.profile.json whose volatileFields override the policy stored in the trace",
+    )
+    parser.add_argument(
+        "--volatile-field",
+        action="append",
+        default=[],
+        dest="volatile_fields",
+        metavar="PATH",
+        help="Add a single volatile field path; repeatable. Combined with --profile if both are given.",
+    )
     return parser
 
 
@@ -129,6 +142,19 @@ def build_regress_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", type=int, help="Fixture server port (overrides profile)")
     parser.add_argument("--no-server", action="store_true", help="Skip starting a fixture server (assume one is already running)")
     parser.add_argument("--server-startup-timeout", type=float, default=15.0, help="Seconds to wait for the fixture server to become healthy")
+    parser.add_argument(
+        "--volatile-field",
+        action="append",
+        default=[],
+        dest="volatile_fields",
+        metavar="PATH",
+        help="Add a volatile field path on top of the policy from --profile / the trace; repeatable.",
+    )
+    parser.add_argument(
+        "--ignore-trace-volatile-fields",
+        action="store_true",
+        help="Ignore the volatileFields stored in the trace; use only --profile and --volatile-field.",
+    )
     return parser
 
 
@@ -164,12 +190,27 @@ def replay_main() -> int:
     trace = json.loads(args.trace.read_text(encoding="utf-8"))
     logger = RunLogger(args.run_log.parent, run_id=args.run_log.stem) if args.run_log else None
 
+    override = None
+    if args.profile is not None:
+        from harness.profile import load_profile
+        profile = load_profile(args.profile)
+        override = list(profile.volatile_fields)
+    extra = list(args.volatile_fields) if args.volatile_fields else None
+
+    def _run() -> dict:
+        return replay_trace(
+            trace,
+            headed=args.headed,
+            volatile_fields_override=override,
+            extra_volatile_fields=extra,
+        )
+
     if logger is not None:
         with logger.timed("replay.completed", trace=str(args.trace)) as completion:
-            result = replay_trace(trace, headed=args.headed)
+            result = _run()
             completion.update(build_replay_completed_event(result))
     else:
-        result = replay_trace(trace, headed=args.headed)
+        result = _run()
 
     args.trace.write_text(json.dumps(attach_replay_result(trace, result), indent=2), encoding="utf-8")
     print(json.dumps(result, indent=2))
@@ -270,8 +311,26 @@ def regress_main() -> int:
             startup_timeout=args.server_startup_timeout,
         )
 
+    # Volatility policy at comparison time:
+    #   - if a profile is in effect, its volatileFields override what the
+    #     trace froze at capture time (matches docs/decisions.md).
+    #   - --ignore-trace-volatile-fields forces an empty base when no profile.
+    #   - --volatile-field always appends.
+    if settings.get("volatile_fields") is not None:
+        override = list(settings["volatile_fields"])
+    elif args.ignore_trace_volatile_fields:
+        override = []
+    else:
+        override = None
+    extra = list(args.volatile_fields) if args.volatile_fields else None
+
     with server_ctx:
-        errors = run_report_regression(args.golden, golden_report)
+        errors = run_report_regression(
+            args.golden,
+            golden_report,
+            volatile_fields_override=override,
+            extra_volatile_fields=extra,
+        )
 
     if errors:
         for error in errors:
