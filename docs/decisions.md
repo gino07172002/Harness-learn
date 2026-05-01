@@ -9,6 +9,77 @@ Do not retroactively backfill history.
 
 ---
 
+## 2026-05-01 — Replay click prefers selectorHint over raw coordinates
+
+Walking through the harness on the simple target produced a green
+report whose `count` stayed at 0 across three clicks. Capture and
+replay both missed `#incrementBtn` because Playwright's
+`page.mouse.click(x, y)` lands on whatever pixel the trace recorded
+at capture time, and viewport / scroll / font-size differences make
+those pixels unreliable. Worse, capture and replay missed *together*,
+so divergence stayed `None` and the regression looked healthy.
+
+`apply_event` for `click` now resolves `selectorHint` first via
+`page.locator(selector)` and falls back to `page.mouse.click(x, y)`
+only when the hint is missing or doesn't match. `pointerdown`,
+`pointermove`, `pointerup` keep using raw coordinates because they
+are usually drag/canvas primitives where coordinates are the signal.
+
+The simple golden's capture-side snapshots were updated to reflect
+real interaction: count climbs 0 → 1 after the increment click;
+pointCount climbs 0 → 1 after the canvas click (Playwright's
+selector-routed click sends a full pointerdown sequence, which
+drawCanvas's `pointerdown` listener catches). The pre-fix golden
+was a hand-rolled fixture that never modeled state transitions.
+
+Alternative considered: keep raw coordinates and adjust the simple
+target so (95, 85) genuinely hits `#incrementBtn`. Rejected because
+that bends the fixture to fit the bug; selectorHint routing is the
+right behavior for any real target whose layout is not pixel-stable.
+
+---
+
+## 2026-05-01 — Sub-millisecond run-log durations show as 0
+
+Spec 3 added `durationMs` to run-log events (replay.completed,
+report.generated, proxy.shutdown). Operations faster than 1 ms log
+`durationMs: 0`. This is expected, not a bug. The signal that timing
+is meant to deliver — drift detection, "is this 100 ms call now an
+800 ms call?" — works fine at millisecond resolution; sub-ms jitter
+is below the noise floor and not worth tracking.
+
+If we ever need microsecond resolution (e.g. measuring report
+generation overhead per snapshot), that's a follow-up: add a parallel
+`durationUs` on a per-event basis, do not change `durationMs`.
+
+---
+
+## 2026-05-01 — Known limits the harness does not enforce
+
+Two drift modes the current tooling does not catch automatically:
+
+1. **Schema vs `harness_client.js` field drift.** When the client
+   records a new session field, `harness/trace_schema.py`
+   `KNOWN_SESSION_FIELDS` must be updated by hand or `--strict`
+   validation will warn. There is no automated cross-check. The
+   process today is: `python harness_validate_trace.py --strict`
+   on a fresh capture and patch `KNOWN_SESSION_FIELDS` if a warning
+   appears. Automating this (e.g. parsing a comment block in
+   `harness_client.js`) was considered and rejected as too clever
+   for the size of the project.
+
+2. **Cross-field consistency in events / snapshots.** The schema
+   validates each field independently. `events[i].type === "click"`
+   with `target.tag === "div"` does not raise. The deliberate
+   choice: replay + divergence + report are the right layer to
+   surface that a click on a div behaved unexpectedly; schema
+   validation is a shape check, not a semantic check.
+
+These are documented here so a future agent does not assume the
+schema's silence implies correctness across layers.
+
+---
+
 ## 2026-05-01 — Volatility override at comparison time (clarification)
 
 The earlier entry said the profile is the single source of truth and a
