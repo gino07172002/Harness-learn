@@ -300,13 +300,18 @@
     return { files: fixtureIds, fileSkips: skips };
   }
 
-  async function recordFormEvent(event, extra) {
+  async function recordFormEvent(event, extra, options) {
     const target = event.target;
     const form = Object.assign({}, extra && extra.form ? extra.form : {});
-    if (filePolicyAllows(target)) {
+    const wantsFiles = !options || options.captureFiles !== false;
+    if (wantsFiles && filePolicyAllows(target)) {
       const captured = await captureInputFiles(target);
       form.files = captured.files;
       form.fileSkips = captured.fileSkips;
+    } else if (target && target.type === "file") {
+      // For the input event we don't open file payloads (that's the change event's job),
+      // but we still want a count so the trace shows the user picked something.
+      form.fileCount = target.files ? target.files.length : 0;
     }
     recordEvent(event, Object.assign({}, extra || {}, { form }));
   }
@@ -576,7 +581,7 @@
 
   document.addEventListener("input", (event) => {
     const target = event.target;
-    recordFormEvent(event, { form: { valueLength: target && "value" in target ? String(target.value).length : 0 } });
+    recordFormEvent(event, { form: { valueLength: target && "value" in target ? String(target.value).length : 0 } }, { captureFiles: false });
   }, true);
 
   document.addEventListener("change", (event) => {

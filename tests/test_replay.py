@@ -151,7 +151,7 @@ class FakeFilePage:
         return self.fake_locator
 
 
-def test_apply_file_input_event_sets_files_before_dispatch():
+def test_apply_file_input_event_sets_files_and_skips_redundant_dispatch():
     from harness.replay import apply_event
 
     page = FakeFilePage()
@@ -173,4 +173,40 @@ def test_apply_file_input_event_sets_files_before_dispatch():
     asyncio.run(apply_event(page, event, trace))
 
     assert page.fake_locator.input_files == [[{"name": "sample.txt", "mimeType": "text/plain", "buffer": b"hello"}]]
+    # Playwright's set_input_files already triggers DOM input/change events; dispatching
+    # the captured event ourselves would replay the same selection twice.
+    assert page.fake_locator.dispatched == []
+
+
+def test_apply_input_event_without_files_still_dispatches_normally():
+    from harness.replay import apply_event
+
+    page = FakeFilePage()
+    event = {
+        "type": "input",
+        "target": {"selectorHint": "#fileInput"},
+        "form": {"valueLength": 0},
+    }
+
+    asyncio.run(apply_event(page, event, trace={"fileFixtures": {}}))
+
+    # Without form.files, replay should fall back to a plain dispatch — no file payload, no swallowing.
+    assert page.fake_locator.input_files == []
+    assert page.fake_locator.dispatched == ["input"]
+
+
+def test_apply_change_event_with_empty_files_list_skips_set_input_files():
+    from harness.replay import apply_event
+
+    page = FakeFilePage()
+    event = {
+        "type": "change",
+        "target": {"selectorHint": "#fileInput"},
+        "form": {"files": []},
+    }
+
+    asyncio.run(apply_event(page, event, trace={"fileFixtures": {}}))
+
+    # form.files is present but empty -> no payload to install, fall back to dispatch.
+    assert page.fake_locator.input_files == []
     assert page.fake_locator.dispatched == ["change"]

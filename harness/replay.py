@@ -275,8 +275,11 @@ async def apply_event(page: Any, event: dict[str, Any], trace: dict[str, Any] | 
             locator = page.locator(selector)
             payloads = extract_file_payloads(trace or {}, event)
             if payloads:
+                # set_input_files already fires the browser's native input/change events,
+                # so dispatching the captured event here would replay the selection twice.
                 await locator.set_input_files(payloads)
-            await locator.dispatch_event(event_type)
+            else:
+                await locator.dispatch_event(event_type)
 
 
 def replay_trace(trace: dict[str, Any], headed: bool = False) -> dict[str, Any]:
