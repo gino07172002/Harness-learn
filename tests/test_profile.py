@@ -66,6 +66,38 @@ def test_parse_profile_defaults_inspector_fields():
     assert profile.console_ignore_patterns == ()
 
 
+def test_parse_profile_defaults_passive_probes_off():
+    profile = parse_profile({"name": "x"}, Path("/fake/harness.profile.json"))
+    pp = profile.passive_probes
+    assert pp.dom_snapshot is False
+    assert pp.dom_selectors == ()
+    assert pp.storage is False
+    assert pp.window_globals_scan is False
+    assert pp.network is False
+
+
+def test_parse_profile_reads_passive_probes_block():
+    profile = parse_profile(
+        {
+            "name": "x",
+            "passiveProbes": {
+                "domSnapshot": True,
+                "domSelectors": ["#status", "[data-testid=count]"],
+                "storage": True,
+                "windowGlobalsScan": True,
+                "network": True,
+            },
+        },
+        Path("/fake/harness.profile.json"),
+    )
+    pp = profile.passive_probes
+    assert pp.dom_snapshot is True
+    assert pp.dom_selectors == ("#status", "[data-testid=count]")
+    assert pp.storage is True
+    assert pp.window_globals_scan is True
+    assert pp.network is True
+
+
 def test_parse_profile_rejects_missing_name():
     with pytest.raises(ValueError, match="missing required field: name"):
         parse_profile({}, Path("/fake/harness.profile.json"))

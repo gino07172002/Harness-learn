@@ -23,6 +23,16 @@ def resolve_target_settings(args: argparse.Namespace, *, require_target: bool = 
 
     if require_target and target is None:
         raise SystemExit("error: --target is required (or pass --profile)")
+    passive_probes_dict = None
+    if profile is not None:
+        pp = profile.passive_probes
+        passive_probes_dict = {
+            "domSnapshot": pp.dom_snapshot,
+            "domSelectors": list(pp.dom_selectors),
+            "storage": pp.storage,
+            "windowGlobalsScan": pp.window_globals_scan,
+            "network": pp.network,
+        }
     return {
         "target": target,
         "target_name": target_name,
@@ -32,6 +42,7 @@ def resolve_target_settings(args: argparse.Namespace, *, require_target: bool = 
         "state_globals": profile.state_globals if profile else None,
         "console_ignore_patterns": profile.console_ignore_patterns if profile else None,
         "volatile_fields": profile.volatile_fields if profile else None,
+        "passive_probes": passive_probes_dict,
     }
 
 
@@ -106,6 +117,7 @@ def server_main() -> int:
         state_globals=settings["state_globals"],
         console_ignore_patterns=settings["console_ignore_patterns"],
         volatile_fields=settings["volatile_fields"],
+        passive_probes=settings["passive_probes"],
     )
     return 0
 

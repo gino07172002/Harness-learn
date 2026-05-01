@@ -10,6 +10,15 @@ DEFAULT_DEBUG_METHODS: tuple[str, ...] = ("snapshot", "actionLog", "errors", "ti
 
 
 @dataclass(frozen=True)
+class PassiveProbes:
+    dom_snapshot: bool = False
+    dom_selectors: tuple[str, ...] = ()
+    storage: bool = False
+    window_globals_scan: bool = False
+    network: bool = False
+
+
+@dataclass(frozen=True)
 class Profile:
     name: str
     root: Path
@@ -20,6 +29,7 @@ class Profile:
     volatile_fields: tuple[str, ...] = ()
     debug_methods: tuple[str, ...] = DEFAULT_DEBUG_METHODS
     console_ignore_patterns: tuple[str, ...] = ()
+    passive_probes: PassiveProbes = PassiveProbes()
     source_path: Path | None = None
 
 
@@ -28,6 +38,14 @@ def parse_profile(data: dict[str, Any], source_path: Path) -> Profile:
         raise ValueError(f"Profile {source_path} missing required field: name")
     raw_root = data.get("root", ".")
     root = (source_path.parent / raw_root).resolve()
+    raw_probes = data.get("passiveProbes") or {}
+    passive_probes = PassiveProbes(
+        dom_snapshot=bool(raw_probes.get("domSnapshot", False)),
+        dom_selectors=tuple(raw_probes.get("domSelectors", [])),
+        storage=bool(raw_probes.get("storage", False)),
+        window_globals_scan=bool(raw_probes.get("windowGlobalsScan", False)),
+        network=bool(raw_probes.get("network", False)),
+    )
     return Profile(
         name=str(data["name"]),
         root=root,
@@ -38,6 +56,7 @@ def parse_profile(data: dict[str, Any], source_path: Path) -> Profile:
         volatile_fields=tuple(data.get("volatileFields", [])),
         debug_methods=tuple(data.get("debugMethods", DEFAULT_DEBUG_METHODS)),
         console_ignore_patterns=tuple(data.get("consoleIgnorePatterns", [])),
+        passive_probes=passive_probes,
         source_path=source_path,
     )
 

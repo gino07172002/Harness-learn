@@ -15,6 +15,9 @@
     .map((p) => { try { return new RegExp(p); } catch (_) { return null; } })
     .filter((r) => r !== null);
   const volatileFields = Array.isArray(bootstrap.volatileFields) ? bootstrap.volatileFields.slice() : [];
+  const passiveProbes = bootstrap.passiveProbes || {};
+  const networkLog = [];
+  const BUILTIN_WINDOW_KEYS = new Set();
 
   const trace = {
     version: 1,
@@ -32,6 +35,7 @@
       debugMethods: debugMethods.slice(),
       stateGlobals: stateGlobals.slice(),
       volatileFields: volatileFields.slice(),
+      passiveProbes: passiveProbes,
       debugHelp: null
     },
     events: [],
@@ -116,6 +120,96 @@
     }
   }
 
+  function probeDomElement(selector) {
+    const el = document.querySelector(selector);
+    if (!el) return { selector, found: false };
+    const rect = el.getBoundingClientRect();
+    return {
+      selector,
+      found: true,
+      tag: el.tagName.toLowerCase(),
+      visible: rect.width > 0 && rect.height > 0,
+      text: (el.textContent || "").slice(0, 120),
+      value: "value" in el ? String(el.value).slice(0, 120) : null,
+      checked: "checked" in el ? Boolean(el.checked) : null,
+      disabled: "disabled" in el ? Boolean(el.disabled) : null,
+      classes: Array.from(el.classList || []).slice(0, 8),
+      attributes: ["aria-expanded", "aria-selected", "aria-pressed", "data-state", "data-active"]
+        .reduce((acc, key) => { const v = el.getAttribute && el.getAttribute(key); if (v !== null && v !== undefined) acc[key] = v; return acc; }, {})
+    };
+  }
+
+  function probeDom() {
+    const out = {
+      title: document.title,
+      activeElement: selectorHint(document.activeElement),
+      bodyChildCount: document.body ? document.body.children.length : 0,
+      formFields: []
+    };
+    const fields = document.querySelectorAll("input, textarea, select");
+    for (let i = 0; i < fields.length && i < 50; i++) {
+      const f = fields[i];
+      out.formFields.push({
+        selector: selectorHint(f),
+        type: f.type || f.tagName.toLowerCase(),
+        value: String(f.value || "").slice(0, 80),
+        checked: "checked" in f ? Boolean(f.checked) : null
+      });
+    }
+    if (Array.isArray(passiveProbes.domSelectors)) {
+      out.elements = passiveProbes.domSelectors.map(probeDomElement);
+    }
+    return out;
+  }
+
+  function probeStorage() {
+    function summarizeStorage(s) {
+      const keys = [];
+      for (let i = 0; i < s.length && i < 100; i++) {
+        const k = s.key(i);
+        const v = s.getItem(k) || "";
+        keys.push({ key: k, valueLength: v.length, sample: v.slice(0, 60) });
+      }
+      return { count: s.length, keys };
+    }
+    return {
+      localStorage: summarizeStorage(window.localStorage),
+      sessionStorage: summarizeStorage(window.sessionStorage),
+      cookieCount: (document.cookie || "").split(";").filter((s) => s.trim()).length
+    };
+  }
+
+  function probeWindowGlobals() {
+    const own = Object.keys(window).filter((k) => !BUILTIN_WINDOW_KEYS.has(k) && !k.startsWith("__"));
+    return own.slice(0, 80).map((k) => {
+      const v = window[k];
+      const t = typeof v;
+      const entry = { name: k, type: t };
+      if (v && t === "object") {
+        entry.constructor = v.constructor ? v.constructor.name : "Object";
+        try { entry.keys = Object.keys(v).slice(0, 20); } catch (_) { entry.keys = null; }
+      } else if (t === "function") {
+        entry.length = v.length;
+      } else if (t === "string") {
+        entry.length = v.length;
+      } else if (t === "number" || t === "boolean") {
+        entry.value = v;
+      }
+      return entry;
+    });
+  }
+
+  function runPassiveProbes() {
+    const out = {};
+    if (passiveProbes.domSnapshot) out.dom = safeCall(probeDom);
+    if (passiveProbes.storage) out.storage = safeCall(probeStorage);
+    if (passiveProbes.windowGlobalsScan) out.windowGlobals = safeCall(probeWindowGlobals);
+    if (passiveProbes.network) {
+      out.networkRecent = networkLog.slice(-20);
+    }
+    return out;
+  }
+
   function captureSnapshot(reason) {
     if (!captureActive) {
       return;
@@ -130,7 +224,8 @@
       debugTiming: null,
       debugMethodResults: {},
       stateSummary: null,
-      stateSummaries: {}
+      stateSummaries: {},
+      passive: runPassiveProbes()
     };
 
     debugMethods.forEach((methodName) => {
@@ -196,6 +291,52 @@
       }
     }
     return false;
+  }
+
+  if (passiveProbes.network) {
+    const originalFetch = window.fetch ? window.fetch.bind(window) : null;
+    if (originalFetch) {
+      window.fetch = function () {
+        const startedAt = now();
+        const args = arguments;
+        const req = args[0];
+        const method = (args[1] && args[1].method) || (req && req.method) || "GET";
+        const url = typeof req === "string" ? req : (req && req.url) || "";
+        return originalFetch.apply(window, args).then(
+          (response) => {
+            networkLog.push({ time: startedAt, kind: "fetch", method, url: String(url).slice(0, 200), status: response.status, durationMs: now() - startedAt });
+            return response;
+          },
+          (error) => {
+            networkLog.push({ time: startedAt, kind: "fetch", method, url: String(url).slice(0, 200), error: String(error && error.message || error).slice(0, 160), durationMs: now() - startedAt });
+            throw error;
+          }
+        );
+      };
+    }
+    const OrigXHR = window.XMLHttpRequest;
+    if (OrigXHR && OrigXHR.prototype && OrigXHR.prototype.open && OrigXHR.prototype.send) {
+      const origOpen = OrigXHR.prototype.open;
+      const origSend = OrigXHR.prototype.send;
+      OrigXHR.prototype.open = function (method, url) {
+        this.__harness_method = method;
+        this.__harness_url = String(url).slice(0, 200);
+        return origOpen.apply(this, arguments);
+      };
+      OrigXHR.prototype.send = function () {
+        const startedAt = now();
+        this.addEventListener("loadend", () => {
+          networkLog.push({ time: startedAt, kind: "xhr", method: this.__harness_method, url: this.__harness_url, status: this.status, durationMs: now() - startedAt });
+        });
+        return origSend.apply(this, arguments);
+      };
+    }
+  }
+
+  if (passiveProbes.windowGlobalsScan) {
+    Object.getOwnPropertyNames(window).forEach((k) => BUILTIN_WINDOW_KEYS.add(k));
+    BUILTIN_WINDOW_KEYS.add("__HARNESS_BOOTSTRAP__");
+    BUILTIN_WINDOW_KEYS.add("__ZERO_MOD_HARNESS__");
   }
 
   const originalConsole = {};

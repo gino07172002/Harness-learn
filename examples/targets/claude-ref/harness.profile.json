@@ -34,5 +34,21 @@
     "context restored",
     "GPU stall",
     "resources rebuilt"
-  ]
+  ],
+  "passiveProbes": {
+    "domSnapshot": true,
+    "domSelectors": [
+      "#appRoot",
+      "#workspaceTabRig",
+      "#workspaceTabSlot",
+      "#workspaceTabObject",
+      "#leftTabRig",
+      "#addBoneBtn",
+      "#fileInput",
+      "#overlay"
+    ],
+    "storage": true,
+    "windowGlobalsScan": true,
+    "network": true
+  }
 }
