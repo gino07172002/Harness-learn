@@ -42,4 +42,4 @@ def test_validate_trace_reports_invalid_replay_type():
 
     errors = validate_trace(trace)
 
-    assert "trace.replay: expected object or null, got list" in errors
+    assert "trace.replay: expected dict or null, got list" in errors

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "session": {"targetName": "simple", "proxyUrl": "http://127.0.0.1:6173"},
+  "events": {},
+  "snapshots": [],
+  "console": [],
+  "errors": [],
+  "screenshots": [],
+  "replay": null
+}

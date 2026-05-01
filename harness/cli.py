@@ -85,6 +85,11 @@ def build_doctor_parser() -> argparse.ArgumentParser:
 def build_validate_trace_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Validate a harness trace JSON file")
     parser.add_argument("trace", type=Path, help="Trace JSON file")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Promote schema warnings to errors (e.g. unknown fields, unrecognized event types)",
+    )
     return parser
 
 
@@ -172,15 +177,32 @@ def doctor_main() -> int:
 
 
 def validate_trace_main() -> int:
-    from harness.trace_validation import load_trace, validate_trace
+    from harness.trace_validation import load_trace, validate_trace_with_warnings
 
     parser = build_validate_trace_parser()
     args = parser.parse_args()
-    errors = validate_trace(load_trace(args.trace))
+    outcome = validate_trace_with_warnings(load_trace(args.trace))
+
+    errors = list(outcome.errors)
+    warnings = list(outcome.warnings)
+
+    if args.strict:
+        errors = errors + warnings
+        warnings = []
+
     if errors:
         for error in errors:
             print(error)
+        if warnings:
+            print("warnings:")
+            for warning in warnings:
+                print(f"  {warning}")
         return 1
+
+    if warnings:
+        print("warnings:")
+        for warning in warnings:
+            print(f"  {warning}")
     print(f"Trace valid: {args.trace}")
     return 0
 
