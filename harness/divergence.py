@@ -107,6 +107,7 @@ def first_snapshot_divergence(
 def first_error_divergence(
     capture_errors: list[dict[str, Any]],
     replay_errors: list[dict[str, Any]],
+    volatile_fields: tuple[str, ...] | list[str] | None = None,
 ) -> dict[str, Any] | None:
     if len(capture_errors) == len(replay_errors) == 0:
         return None
@@ -114,15 +115,18 @@ def first_error_divergence(
     for index in range(pairs):
         cap_msg = capture_errors[index].get("message") or capture_errors[index].get("reason")
         rep_msg = replay_errors[index].get("message") or replay_errors[index].get("reason")
-        if cap_msg != rep_msg:
+        path = f"errors[{index}].message"
+        if cap_msg != rep_msg and not is_volatile(path, volatile_fields):
             return {
                 "kind": "error",
                 "stepIndex": index,
-                "path": "message",
+                "path": path,
                 "expected": cap_msg,
                 "actual": rep_msg,
             }
-    if len(capture_errors) != len(replay_errors):
+    if len(capture_errors) != len(replay_errors) and not is_volatile(
+        "errors.length", volatile_fields
+    ):
         return {
             "kind": "error",
             "stepIndex": pairs,
@@ -130,6 +134,48 @@ def first_error_divergence(
             "expected": len(capture_errors),
             "actual": len(replay_errors),
         }
+    return None
+
+
+def first_event_divergence(
+    capture_events: list[dict[str, Any]],
+    replay_events: list[dict[str, Any]],
+    volatile_fields: tuple[str, ...] | list[str] | None = None,
+) -> dict[str, Any] | None:
+    """Reserved API for future event-level divergence diffing.
+
+    The caller in harness.replay does not yet invoke this; defining the
+    signature here ensures the volatility contract applies the moment
+    event-level diffing turns on. See
+    docs/superpowers/specs/2026-05-01-divergence-volatility-coverage-design.md.
+    """
+    if len(capture_events) != len(replay_events) and not is_volatile(
+        "events.length", volatile_fields
+    ):
+        return {
+            "kind": "event",
+            "stepIndex": min(len(capture_events), len(replay_events)),
+            "path": "events.length",
+            "expected": len(capture_events),
+            "actual": len(replay_events),
+        }
+    pairs = min(len(capture_events), len(replay_events))
+    for index in range(pairs):
+        diff = diff_value(
+            capture_events[index],
+            replay_events[index],
+            f"events[{index}]",
+            volatile_fields,
+        )
+        if diff is not None:
+            path, expected, actual = diff
+            return {
+                "kind": "event",
+                "stepIndex": index,
+                "path": path,
+                "expected": expected,
+                "actual": actual,
+            }
     return None
 
 
@@ -145,4 +191,8 @@ def find_first_divergence(
     )
     if snapshot_diff is not None:
         return snapshot_diff
-    return first_error_divergence(trace.get("errors", []), replay_result.get("errors", []))
+    return first_error_divergence(
+        trace.get("errors", []),
+        replay_result.get("errors", []),
+        volatile_fields,
+    )

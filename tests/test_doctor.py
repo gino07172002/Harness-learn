@@ -1,6 +1,12 @@
 from pathlib import Path
 
-from harness.doctor import CheckResult, check_target_path, check_writable_directory, render_doctor_text
+from harness.doctor import (
+    CheckResult,
+    check_target_path,
+    check_volatility_suppression,
+    check_writable_directory,
+    render_doctor_text,
+)
 
 
 def test_check_target_path_passes_for_directory_with_index(tmp_path: Path):
@@ -44,3 +50,17 @@ def test_render_doctor_text_summarizes_results():
     assert "ok: false" in text
     assert "python.version: ok" in text
     assert "port.available: fail - Port 6173 is already in use" in text
+
+
+def test_volatility_suppression_passes_when_no_fields_declared():
+    result = check_volatility_suppression(None)
+
+    assert result.name == "volatility.suppression"
+    assert result.ok is True
+
+
+def test_volatility_suppression_passes_with_normal_field():
+    result = check_volatility_suppression(["state.tickCount"])
+
+    assert result.ok is True
+    assert "1 volatile field" in result.message

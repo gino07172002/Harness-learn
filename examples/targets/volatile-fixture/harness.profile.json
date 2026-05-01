@@ -1,0 +1,9 @@
+{
+  "name": "volatile-fixture",
+  "root": ".",
+  "startupPath": "/",
+  "host": "127.0.0.1",
+  "port": 6174,
+  "stateGlobals": ["state"],
+  "volatileFields": ["debugSnapshot.value.tick"]
+}

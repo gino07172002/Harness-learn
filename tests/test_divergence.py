@@ -2,6 +2,7 @@ from harness.divergence import (
     diff_value,
     find_first_divergence,
     first_error_divergence,
+    first_event_divergence,
     first_snapshot_divergence,
 )
 
@@ -137,3 +138,53 @@ def test_first_snapshot_divergence_passes_volatile_fields_through():
     replay = [{"reason": "x", "debugSnapshot": {"ok": True, "value": {"frameMs": 9.9, "count": 1}}, "stateSummary": None}]
 
     assert first_snapshot_divergence(capture, replay, volatile_fields=["debugSnapshot.value.frameMs"]) is None
+
+
+def test_first_error_divergence_suppresses_volatile_message_path():
+    capture = [{"message": "boom-2026-01-01"}]
+    replay = [{"message": "boom-2026-05-01"}]
+
+    assert first_error_divergence(capture, replay, volatile_fields=["errors[0].message"]) is None
+
+
+def test_first_error_divergence_still_reports_non_volatile_message():
+    capture = [{"message": "real failure"}]
+    replay = [{"message": "different failure"}]
+
+    divergence = first_error_divergence(capture, replay, volatile_fields=["errors[1].message"])
+
+    assert divergence is not None
+    assert divergence["kind"] == "error"
+    assert divergence["path"] == "errors[0].message"
+
+
+def test_find_first_divergence_forwards_volatile_to_error_branch():
+    trace = {"snapshots": [], "errors": [{"message": "boom-x"}]}
+    replay = {"snapshots": [], "errors": [{"message": "boom-y"}]}
+
+    assert find_first_divergence(trace, replay, volatile_fields=["errors[0].message"]) is None
+
+
+def test_first_event_divergence_returns_none_for_aligned_events():
+    capture = [{"type": "click", "time": 1}]
+    replay = [{"type": "click", "time": 1}]
+
+    assert first_event_divergence(capture, replay) is None
+
+
+def test_first_event_divergence_reports_length_mismatch():
+    capture = [{"type": "click"}, {"type": "input"}]
+    replay = [{"type": "click"}]
+
+    divergence = first_event_divergence(capture, replay)
+
+    assert divergence is not None
+    assert divergence["kind"] == "event"
+    assert divergence["path"] == "events.length"
+
+
+def test_first_event_divergence_respects_volatile_fields():
+    capture = [{"type": "click", "time": 1}]
+    replay = [{"type": "click", "time": 999}]
+
+    assert first_event_divergence(capture, replay, volatile_fields=["events[0].time"]) is None

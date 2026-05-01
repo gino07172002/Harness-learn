@@ -171,7 +171,12 @@ def doctor_main() -> int:
     parser = build_doctor_parser()
     args = parser.parse_args()
     settings = resolve_target_settings(args)
-    results = run_doctor_checks(settings["target"], settings["port"], settings["host"])
+    results = run_doctor_checks(
+        settings["target"],
+        settings["port"],
+        settings["host"],
+        volatile_fields=settings.get("volatile_fields"),
+    )
     print(render_doctor_json(results) if args.json else render_doctor_text(results), end="")
     return 0 if all(result.ok for result in results) else 1
 
